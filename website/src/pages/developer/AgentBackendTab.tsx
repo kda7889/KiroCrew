@@ -25,6 +25,7 @@ import { KiroAccountStatusLine } from './KiroAccountStatusLine'
 import { KasBundleCard, KasEngineDeepLink } from './KasBundleCard'
 import { OrchestratorMemoryDeepLink, OrchestratorMemoryToggle } from './OrchestratorMemoryToggle'
 import { StrandsSetupCard } from './StrandsSetupCard'
+import { DeepSeekKeyCard } from './DeepSeekKeyCard'
 import { MCP_SERVERS_HREF } from '../connections/connectionsLinks'
 import { KIRO_SIGN_IN_BACKEND } from './kiroSignInLink'
 import { HarnessLogo } from '../../components/HarnessLogo'
@@ -40,6 +41,7 @@ const KIRO_CLI_INSTALL_DOCS_URL = 'https://kiro.dev/cli/'
 const CLAUDE = 'claude'
 const KAS = ACP_BACKEND_KAS
 const STRANDS = 'strands'
+const DEEPSEEK = 'deepseek'
 
 /**
  * The agents this frontend has a translated name and an icon for.
@@ -1262,8 +1264,8 @@ export function AgentBackendTab() {
     if (row?.installed === 'unknown')
       return (
         <>
-          {/* No hand-off: this detail can also hold the Strands setup card,
-              whose model and sign-in drafts are not saved yet, and the
+          {/* No hand-off: this detail can also hold the Strands setup card or
+              the DeepSeek key card, whose drafts are not saved yet, and the
               hand-off's navigation to the chat would discard them. */}
           <ErrorNotice
             message={i18nT('pages.developer.agentBackendTab.install_check_failed_can_still_switch')}
@@ -1788,6 +1790,11 @@ export function AgentBackendTab() {
                     {value === STRANDS && (
                       <ErrorBoundary scope="developer-strands-setup" fallback={null}>
                         <StrandsSetupCard />
+                      </ErrorBoundary>
+                    )}
+                    {value === DEEPSEEK && (
+                      <ErrorBoundary scope="developer-deepseek-key" fallback={null}>
+                        <DeepSeekKeyCard />
                       </ErrorBoundary>
                     )}
                     {facts(value)}
