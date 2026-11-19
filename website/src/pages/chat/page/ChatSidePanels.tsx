@@ -74,6 +74,10 @@ interface ChatSidePanelsProps {
   historyActions: PreviewActions
   activeSlotTitle: string | undefined
   activitySlot: HTMLElement | null
+  /** The panel is mounted inline, in the page's own row, rather than in the
+   *  shell's column (panelInlineHost, lib/touchLayoutForm.ts). A fold never
+   *  changes it, so folding never remounts the panel or its frames. */
+  panelInline: boolean
   /** Look the shell's `#activity-bar-slot` up again (sessionsDrawer). */
   refreshActivitySlot?: () => void
   /** An embedded chat or a popout: no shell column, no health check. */
@@ -107,7 +111,7 @@ export default function ChatSidePanels({
   mode, activeSlot, connected, isMobile, activityOpen, insertDashboardReply, addSourceCommentToChat, handleArtifactOpen, handleFileOpen, handleFileSave,
   handleOpenWorkingTreeDiff, hasBrowserTab, hasLiveAppTab, panelIssues, panelSources, dismissSource, reconcileIssueUrl, reconcileSourceUrl, search, selectedIssueUrl, selectedSourceUrl, selectIssueUrl,
   selectSourceUrl, tabsCtl, submitComments, currentSlot, handleAddToContext, sidePanelDock, sidePanelDockAnim, effectiveSidebarWidth, toggleAct, chatNav, chatPins, chatPinsLoading, handleJumpToPin, handlePutPinInComposer,
-  handleUnpinById, historyActions, activeSlotTitle, activitySlot, refreshActivitySlot, embedded, chatPaneEl, hasTaskDashboard, sidebarOpen, sideOverlayPanelRef, sideOverlayPhase, sideOverlayX, panelFillWidth, panelMaximized,
+  handleUnpinById, historyActions, activeSlotTitle, activitySlot, panelInline, refreshActivitySlot, embedded, chatPaneEl, hasTaskDashboard, sidebarOpen, sideOverlayPanelRef, sideOverlayPhase, sideOverlayX, panelFillWidth, panelMaximized,
   pinSummary, trackpad,
 }: ChatSidePanelsProps) {
   const { deskSlide, deskSpacerW, deskPanelWrapRef } = trackpad
@@ -151,7 +155,7 @@ export default function ChatSidePanels({
   }] : undefined), [historyTab.tabOpen, historyTab.onScreen, activeSlot, closeSearch, focusNonce, historyActions, isMobile])
   // The store says open, the panel must be on screen (useSidePanelHealth).
   useSidePanelHealth({
-    enabled: activityOpen && !isMobile && !embedded,
+    enabled: activityOpen && !panelInline && !embedded,
     activeSlot,
     dock: sidePanelDock,
     slot: activitySlot,
