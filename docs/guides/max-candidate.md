@@ -33,6 +33,9 @@ If the latter reports stale output, run `npm run gen:ui`, review and commit the
 generated changes, then check again. Do not use warning-only mode as a passing
 freshness gate. No arbitrary wall-clock deadline is part of this procedure;
 pairing/login expiry and protocol timeouts remain security requirements.
+If the local host cannot admit that graph with a reserve, use the
+[separate Ubuntu gate procedure](max-ubuntu-gates.md). It transfers only reviewed
+source and runs no gateway, provider login, subscription or real token.
 
 The root CONTRIBUTING guide and install guide own `make build` and its dependency
 setup. A sparse checkout must first materialize their Makefile, packaging files
