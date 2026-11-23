@@ -44,6 +44,58 @@ download nor a missing tool is a passing gate.
 
 ## Isolated candidate, only after source review
 
+### Credential-free browser and OS evidence before a candidate
+
+The production Vite bundle and SDK declaration emit were built locally from
+source checkpoint `9c73721b`; the report records commands and RSS. This did not
+stage assets into the installed gateway. Browser evidence remains missing:
+Chromium with `chromiumSandbox: true` failed with **No usable sandbox** in the
+agent execution context. No retry with sandbox disabled is allowed.
+
+The prepared runner uses the real built SPA, the existing loopback-only static
+preview helper and API fixtures. It starts no backend and performs no auth mint.
+It checks disabled controls, teammate hiding, paired state, code display,
+explicit subscription success and forbidden subscription failure. Every POST is
+intercepted and must have an empty object body. Unexpected external requests fail.
+The code and subscription responses are synthetic; they grant no access anywhere.
+
+On a reviewed host where Chromium sandboxing and loopback previews are already
+permitted, run from the source checkout in an ordinary operator terminal:
+
+```bash
+cd /home/adminuser/.kiro/crew/workspace-member-codex-dev/kirocrew-max-source/website
+: "${MAX_PREFLIGHT_EVIDENCE:?Choose an absolute evidence directory}"
+node scripts/verify-max-settings.mjs "$MAX_PREFLIGHT_EVIDENCE"
+```
+
+Expected result: six `PASS` lines and two screenshots. The runner closes Chromium
+and its static preview after the checks. It does not amend the dashboard's allowed
+preview origins or require a logged-in browser. Do not substitute an auth token,
+live data home or backend endpoint. If the host refuses sandboxing or previews,
+stop; do not disable namespace/seccomp/AppArmor policy. The six browser scenarios
+have **not run successfully** in this agent context; syntax checks alone do not
+prove them. Review screenshots after a successful run.
+
+For MAX storage, `test/test_max_os_fence.py` is an explicit real-kernel check.
+It uses a fresh temporary data home and synthetic state, asserts a different
+mount namespace, denies reading/overwriting/creating MAX state, and requires a
+writable sibling control. It never clears the launcher marker or relaxes policy.
+The exact local check used this existing test interpreter and read-only
+dependency path, with source taking precedence. Run from the source root in a
+permitted ordinary host terminal; neither environment needs copying or updating:
+
+```bash
+PYTHONPATH=src:/home/adminuser/.kiro/crew-venv-0.13.1/lib/python3.12/site-packages /home/adminuser/.kiro/crew/workspace-member-codex-dev/max-test-env/bin/python -m pytest -o addopts='' test/test_max_os_fence.py -q -rs --disable-warnings --maxfail=1
+```
+
+These are this machine's existing paths, not a portable install command. Require
+**one passed**, not a skip. The local run skipped because user namespaces were
+unavailable. A separate source probe reported `inside_kirocrew_sandbox=true` and
+`unshare(CLONE_NEWUSER): EPERM`, which describes this execution context, not the
+capability of an ordinary host terminal. Neither result proves MAX OS isolation.
+No sysctl, AppArmor, seccomp, namespace flag or runtime marker may be weakened to
+obtain evidence. Keep this gate open if no permitted execution context is ready.
+
 The next step after green source gates is to review a pinned candidate-install
 plan: full commit/base/package versions, isolated data/venv, chosen free loopback
 port, and stop/rollback steps. Before any real MAX setup, verify the candidate's
