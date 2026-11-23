@@ -2,7 +2,7 @@
 
 Prepared commands only: no SSH connection, remote install or gateway operation
 has been performed. Use an owner-selected machine, SSH alias and fresh directory.
-Copy only the four reviewed source patches, never a data home, `.env`, vault,
+Copy only the five reviewed source patches, never a data home, `.env`, vault,
 auth store, signing key, SSH key, browser profile or installed venv.
 
 ## Resource decision
@@ -19,6 +19,11 @@ dashboard dependency graph. Prior heap failures at 640/1024 MiB are lower bounds
 not measurements of successful peak RSS. Local available memory was 2.9 GB TIGHT.
 That does not leave a safe reserve for an unmeasured multi-GiB graph. Do not replay
 those failed limits or start a parallel build.
+
+Later, local available memory rose to 4.5 GB. The full strict UI-index gate
+completed with a 3 GiB heap; regeneration added the MAX tab/label and its check
+passed with maximum RSS 1837156 KiB (about 1.75 GiB), swaps zero. Full tsc still
+has no successful peak measurement. The remote budget below remains conservative.
 
 On the gate machine, require at least 6 GiB **MemAvailable** before each graph
 gate. This reserves space above the proposed 4 GiB Node heap for native allocations,
@@ -44,7 +49,7 @@ SSH authentication; no credentials are copied into the task:
 ```bash
 : "${MAX_GATE_SSH:?Choose the Ubuntu SSH alias}"
 : "${MAX_GATE_ROOT:?Set the existing remote gate directory}"
-scp /home/adminuser/.kiro/crew/workspace-member-codex-dev/max-integration.patch /home/adminuser/.kiro/crew/workspace-member-codex-dev/max-production.patch /home/adminuser/.kiro/crew/workspace-member-codex-dev/max-review.patch /home/adminuser/.kiro/crew/workspace-member-codex-dev/max-followup.patch "$MAX_GATE_SSH:$MAX_GATE_ROOT/patches/"
+scp /home/adminuser/.kiro/crew/workspace-member-codex-dev/max-integration.patch /home/adminuser/.kiro/crew/workspace-member-codex-dev/max-production.patch /home/adminuser/.kiro/crew/workspace-member-codex-dev/max-review.patch /home/adminuser/.kiro/crew/workspace-member-codex-dev/max-followup.patch /home/adminuser/.kiro/crew/workspace-member-codex-dev/max-ui-index.patch "$MAX_GATE_SSH:$MAX_GATE_ROOT/patches/"
 ssh "$MAX_GATE_SSH"
 ```
 
@@ -59,21 +64,23 @@ sha256sum -c <<'HASHES'
 3d9cd1b48f9841830cc7035cd396fd4ca70d7c819996df316a3c9355083cf71a  max-production.patch
 2831a2473d662fc3672596977e8a8247b10309b6f5c01be461caa5c6164b6820  max-review.patch
 58ebd5c6b9d6279fd46b87818b04563fefe70e70e3f730e89f4909d43070a92d  max-followup.patch
+46a5c4e402ba02c6176d7687892a4b87850c8f0a856e864dc75e059cc67c2c99  max-ui-index.patch
 HASHES
 git clone --filter=blob:none --no-checkout https://github.com/kirodotdev/KiroCrew.git "$MAX_GATE_ROOT/source"
 cd "$MAX_GATE_ROOT/source"
 git fetch --depth=1 origin 230514b679ba349052d6f8fd1eae838bdd5ddd7d
 git switch -c codex-dev/max-messenger 230514b679ba349052d6f8fd1eae838bdd5ddd7d
-for patch in max-integration.patch max-production.patch max-review.patch max-followup.patch; do
+for patch in max-integration.patch max-production.patch max-review.patch max-followup.patch max-ui-index.patch; do
   git apply --check --index "$MAX_GATE_ROOT/patches/$patch"
   git apply --index "$MAX_GATE_ROOT/patches/$patch"
 done
-test "$(git write-tree)" = 5999c9580ada2d4aa055d6ef01bd17012a98891f
+test "$(git write-tree)" = a4e0137e22aba33eb5800920e30d3b7c5637f76f
 git diff --cached --check
 ```
 
-These four patches reconstruct the exact tree of source commit
-`38882c4a593f3f4792208d91d4b68b471b4ff0df` on public base `230514b6`.
+These five patches reconstruct source commit
+`38882c4a593f3f4792208d91d4b68b471b4ff0df` plus the reviewed generated MAX index
+on public base `230514b6`. Later operator-documentation-only changes are excluded.
 They do not recreate its commit metadata: HEAD remains the public base and the
 candidate is staged. Record that distinction. This recipe runs full-source
 type/index commands, not diff-scoped ratchets that could inspect the wrong HEAD.

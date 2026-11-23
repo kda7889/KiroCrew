@@ -43,6 +43,7 @@ and pairing confirmation. Codes remain in component memory only, disappear at
 expiry or pairing, and are not stored in localStorage. GET `/api/max/config`
 returns owner ID as a string and local readiness without secrets. Readiness does
 not assert a live MAX connection; the generic `connected` flag remains false.
+The generated UI index registers the MAX channel tab at `/settings/channels/max`.
 
 For production setup after review: save a separate `MAX_WEBHOOK_SECRET` through
 Secrets, set `max.delivery_mode=webhook`, and arrange the chosen external HTTPS
