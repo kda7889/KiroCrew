@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import { useEffect } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { api } from '../../api/client'
 import ErrorNotice from '../../components/ErrorNotice'
