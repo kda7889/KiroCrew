@@ -25,10 +25,7 @@ class OwnerAccess:
     def numeric_owner(ids):
         return (
             ids[0]
-            if isinstance(ids, list)
-            and len(ids) == 1
-            and type(ids[0]) is int
-            and ids[0] > 0
+            if isinstance(ids, list) and len(ids) == 1 and type(ids[0]) is int and ids[0] > 0
             else None
         )
 
@@ -64,15 +61,9 @@ class OwnerAccess:
             valid = (
                 self._clock() < self._expires
                 and self._attempts <= PAIR_ATTEMPTS
-                and hmac.compare_digest(
-                    self._digest, hashlib.sha256(code.encode()).digest()
-                )
+                and hmac.compare_digest(self._digest, hashlib.sha256(code.encode()).digest())
             )
-            if (
-                valid
-                or self._attempts >= PAIR_ATTEMPTS
-                or self._clock() >= self._expires
-            ):
+            if valid or self._attempts >= PAIR_ATTEMPTS or self._clock() >= self._expires:
                 self._digest = None
             if not valid:
                 return False

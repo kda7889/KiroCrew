@@ -162,6 +162,7 @@ _SENSITIVE_HOME_DIRS: list[str] = [
 _CREW_HOME_PREFIXES: tuple[str, ...] = (".kiro/crew", ".kirocrew")
 
 _CREW_SECRET_LEAVES: list[str] = [
+    "max",  # Only the gateway may read or mutate channel admission/retry state.
     "scratch/.trees.json",  # Reads expose other trees; writes remap resumes.
     # Gateway diagnostics, for the reason the sandbox mask gives: the rows carry
     # frame labels, folded stacks and process detail, and the owner-gated read

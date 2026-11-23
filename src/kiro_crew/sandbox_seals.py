@@ -202,6 +202,7 @@ def _warn_unsealed_ceiling(target: str, exc: "OSError | None") -> None:
 #: reader uses, and following a link is exactly the gap that voids it.
 _CREW_NO_ALIAS_LEAVES: frozenset[str] = frozenset(
     {
+        "max",
         "crew-panels",
         "kept-grants",
         "member-records",

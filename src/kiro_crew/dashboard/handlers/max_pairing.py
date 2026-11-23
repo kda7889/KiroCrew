@@ -55,7 +55,12 @@ async def api_max_subscribe(request):
     state = request.app.get("state")
     transport = state.channel_transports.get("max") if state else None
     service = getattr(transport, "webhook", None)
-    if not cfg.max.enabled or cfg.max.delivery_mode != "webhook" or service is None:
+    if (
+        not cfg.max.enabled
+        or cfg.max.delivery_mode != "webhook"
+        or transport is None
+        or service is None
+    ):
         return web.json_response({"error": "max_webhook_not_ready"}, status=409)
     try:
         url = subscription_url(cfg.dashboard.url)

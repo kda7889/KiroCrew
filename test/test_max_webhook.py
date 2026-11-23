@@ -2,11 +2,82 @@
 
 import asyncio
 import json
+import os
 from types import SimpleNamespace
 from typing import ClassVar
 
 import pytest
 from aiohttp.test_utils import make_mocked_request
+
+
+def test_max_storage_fence_covers_future_sqlite_sidecars():
+    from kiro_crew.sandbox_leaves import _CREW_HIDDEN_LEAVES
+    from kiro_crew.sandbox_precreate import _CREW_PRECREATE_HIDDEN_DIR_LEAVES
+    from kiro_crew.sandbox_seals import _CREW_NO_ALIAS_LEAVES
+    from kiro_crew.security.paths_lists import _CREW_SECRET_LEAVES
+
+    # A whole precreated directory covers future journals and atomic cursor temps.
+    assert "max" in _CREW_HIDDEN_LEAVES
+    assert "max" in _CREW_PRECREATE_HIDDEN_DIR_LEAVES
+    assert "max" in _CREW_NO_ALIAS_LEAVES
+    assert "max" in _CREW_SECRET_LEAVES
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX permission contract")
+def test_inbox_refuses_public_file_and_symlink(tmp_path):
+    from kiro_crew.max.webhook import WebhookInbox
+
+    target = tmp_path / "target.sqlite"
+    target.touch(mode=0o644)
+    with pytest.raises(PermissionError):
+        WebhookInbox(target)
+    link = tmp_path / "link.sqlite"
+    link.symlink_to(target)
+    with pytest.raises(OSError):
+        WebhookInbox(link)
+    assert target.read_bytes() == b""
+
+
+def test_inbox_refuses_replaced_database(tmp_path):
+    from kiro_crew.max.webhook import WebhookInbox
+
+    path = tmp_path / "inbox.sqlite"
+    inbox = WebhookInbox(path)
+    path.rename(tmp_path / "original.sqlite")
+    path.touch(mode=0o600)
+    with pytest.raises(PermissionError):
+        inbox.next()
+
+
+@pytest.mark.asyncio
+async def test_failed_control_is_not_replayed_against_a_later_approval(tmp_path):
+    from kiro_crew.max.webhook import MaxWebhook
+
+    calls = []
+
+    async def refresh():
+        pass
+
+    async def receive(raw):
+        calls.append(raw)
+        raise RuntimeError("interrupted after applying verdict")
+
+    service = MaxWebhook(
+        SimpleNamespace(_refresh=refresh, receive=receive),
+        None,
+        "synthetic-secret",
+        tmp_path / "inbox.sqlite",
+    )
+    raw = {
+        "update_type": "message_created",
+        "message": {
+            "body": {"mid": "approval-one", "text": "/approve"},
+        },
+    }
+    with pytest.raises(RuntimeError):
+        await service.accept(raw)
+    await service.accept(raw)
+    assert len(calls) == 1
 
 
 @pytest.mark.asyncio
@@ -55,9 +126,7 @@ async def test_receiver_rejects_bad_shape_and_accepts_once(monkeypatch):
         received.append(raw)
 
     service = SimpleNamespace(secret="synthetic-webhook-secret", accept=accept)
-    state = SimpleNamespace(
-        channel_transports={"max": SimpleNamespace(webhook=service)}
-    )
+    state = SimpleNamespace(channel_transports={"max": SimpleNamespace(webhook=service)})
 
     class Request:
         app: ClassVar = {"state": state}
@@ -294,8 +363,7 @@ def test_subscription_url_uses_only_existing_origin():
     from kiro_crew.max.webhook import subscription_url
 
     assert (
-        subscription_url("https://crew.example.org")
-        == "https://crew.example.org/api/messaging/max"
+        subscription_url("https://crew.example.org") == "https://crew.example.org/api/messaging/max"
     )
 
 
@@ -330,6 +398,14 @@ async def test_only_host_owner_explicitly_registers_subscription(monkeypatch):
     assert (await max_pairing.api_max_subscribe(req)).status in (401, 403)
     assert not calls
     req["user"] = "42"
+    monkeypatch.setattr(max_pairing, "check_origin", lambda req, require: False)
+    assert (await max_pairing.api_max_subscribe(req)).status == 403
+    assert not calls
+    monkeypatch.setattr(max_pairing, "check_origin", lambda req, require: True)
+    req["app"] = "untrusted-app"
+    assert (await max_pairing.api_max_subscribe(req)).status == 403
+    assert not calls
+    req["app"] = ""
     assert (await max_pairing.api_max_subscribe(req)).status == 200
     assert calls[0][0:2] == ("POST", "/subscriptions")
     assert calls[0][2]["url"] == "https://crew.example.org/api/messaging/max"

@@ -19,7 +19,5 @@ class MaxConfig:
     )
     allowed_user_ids: list[int] = field(
         default_factory=list,
-        metadata=_meta(
-            "Owner", "Exactly one numeric owner. Empty denies everyone until paired."
-        ),
+        metadata=_meta("Owner", "Exactly one numeric owner. Empty denies everyone until paired."),
     )

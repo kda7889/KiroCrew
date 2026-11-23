@@ -148,6 +148,8 @@ _MD_NOTEBOOK_RETIRED_STATE_LEAVES: tuple[str, ...] = tuple(
 
 #: Crew-home leaves with no legitimate in-sandbox reader — bind-masked in every mode.
 _CREW_HIDDEN_LEAVES: tuple[str, ...] = (
+    # Gateway-only MAX inbox, retry fingerprints, cursor and future SQLite sidecars.
+    "max",
     # Gateway diagnostics: recorded host and gateway state, plus loop-stall dumps.
     # The gateway process writes these; an agent reads them through the owner-gated
     # /api/debug routes and the kirocrew-debug MCP tools, which redact on the way

@@ -27,9 +27,7 @@ class MaxRenderer(SilentRenderer):
         await self._flush()
 
         async def timeout():
-            await self.transport.send_message(
-                self.uid, "Approval expired; tool denied."
-            )
+            await self.transport.send_message(self.uid, "Approval expired; tool denied.")
 
         open_approval(
             self.session_key,

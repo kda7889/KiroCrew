@@ -5,9 +5,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 const state = vi.hoisted(() => ({ owner: '', ready: true, code: 'synthetic-code' }))
 const issue = vi.hoisted(() => vi.fn(async () => ({ code: state.code, expires_in: 300 })))
+const subscribe = vi.hoisted(() => vi.fn(async () => ({ ok: true })))
 vi.mock('../../api/client', () => ({ api: {
   getMaxConfig: async () => ({ owner_id: state.owner, ready: state.ready, delivery_mode: 'webhook' }),
   issueMaxPairing: issue,
+  registerMaxSubscription: subscribe,
 } }))
 vi.mock('../../i18n/t', () => ({ i18nT: (key: string, values?: Record<string, string>) => key + (values?.id ?? '') }))
 vi.mock('../../components/ErrorNotice', () => ({ default: ({ message }: { message: string }) => <div role="alert">{message}</div> }))
@@ -51,4 +53,24 @@ test('an inactive channel cannot issue codes', async () => {
   const button = await screen.findByRole('button', { name: 'pages.settings.maxPanel.pair' })
   expect((button as HTMLButtonElement).disabled).toBe(true)
   expect(issue).not.toHaveBeenCalled()
+})
+
+test('the owner explicitly registers the webhook from Settings', async () => {
+  mount()
+  const button = await screen.findByRole('button', { name: 'pages.settings.maxPanel.subscribe' })
+  await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false))
+  expect(subscribe).not.toHaveBeenCalled()
+  fireEvent.click(button)
+  await screen.findByText('pages.settings.maxPanel.subscribed')
+  expect(subscribe).toHaveBeenCalledTimes(1)
+})
+
+test('a rejected subscription shows an error without claiming success', async () => {
+  subscribe.mockRejectedValueOnce(new Error('owner_only'))
+  mount()
+  const button = await screen.findByRole('button', { name: 'pages.settings.maxPanel.subscribe' })
+  await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false))
+  fireEvent.click(button)
+  await screen.findByRole('alert')
+  expect(screen.queryByText('pages.settings.maxPanel.subscribed')).toBeNull()
 })

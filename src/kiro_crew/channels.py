@@ -68,8 +68,10 @@ def builtin_channel_descriptors() -> tuple[ChannelDescriptor, ...]:
     """Every builtin channel, in governance-membership order."""
     return (
         ChannelDescriptor(
-            channel_type="max", start=maybe_start_max,
-            credentials=("MAX_BOT_TOKEN",), restart_credentials=("MAX_WEBHOOK_SECRET",),
+            channel_type="max",
+            start=maybe_start_max,
+            credentials=("MAX_BOT_TOKEN",),
+            restart_credentials=("MAX_WEBHOOK_SECRET",),
             boot_keys=frozenset({"enabled", "allowed_user_ids", "delivery_mode"}),
         ),
         ChannelDescriptor(

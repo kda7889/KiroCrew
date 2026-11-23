@@ -10899,13 +10899,6 @@
       "uptime": "Uptime"
     },
     "settings": {
-      "maxPanel": {
-        "guide": "Add the bot token in Settings → Secrets, then enable MAX.",
-        "pair": "Pair owner",
-        "paired": "Owner paired: {{id}}",
-        "inactive": "MAX is not running. Check its settings and secrets.",
-        "code_hint": "This code expires in five minutes. Send this command to the bot in a private chat."
-      },
       "aboutPanel": {
         "a_new_version": "A new version",
         "a_newer_version_is_available": "A newer version is available.",

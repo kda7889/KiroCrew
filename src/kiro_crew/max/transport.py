@@ -59,11 +59,7 @@ class MaxTransport(MessagingTransport):
     async def resolve_configured_target(self, target_id):
         uid = target_id.removeprefix("user:")
         await self._refresh()
-        return (
-            (uid, None)
-            if target_id.startswith("user:") and self.may_send_to(uid)
-            else None
-        )
+        return (uid, None) if target_id.startswith("user:") and self.may_send_to(uid) else None
 
     async def resolve_conversation(self, user_id):
         if not user_id.isdecimal() or not self.access.allowed(int(user_id)):
@@ -80,11 +76,16 @@ class MaxTransport(MessagingTransport):
             raise PermissionError("MAX groups and threads are disabled")
         from kiro_crew.messaging.renderer import chunk_for_transport
 
-        for token in (getattr(self.client, "_token", ""), getattr(getattr(self, "webhook", None), "secret", "")):
+        for token in (
+            getattr(self.client, "_token", ""),
+            getattr(getattr(self, "webhook", None), "secret", ""),
+        ):
             if token:
                 content = content.replace(token, "[REDACTED: credential]")
         mid = ""
         for chunk in chunk_for_transport(content, self.capabilities):
+            await self._refresh()
+            await self.resolve_conversation(conversation_id)
             mid = await self.client.send(int(conversation_id), chunk)
         return mid
 
@@ -99,10 +100,7 @@ class MaxTransport(MessagingTransport):
             user = raw.get("user") or {}
             uid = user.get("user_id")
             # A start event lacks a recipient: verify the chat through MAX.
-            if (
-                user.get("is_bot")
-                or await self.client.chat_type(raw.get("chat_id")) != "dialog"
-            ):
+            if user.get("is_bot") or await self.client.chat_type(raw.get("chat_id")) != "dialog":
                 return
             await self._refresh()
             await self._start(uid, raw.get("payload") or "")

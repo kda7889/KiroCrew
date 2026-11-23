@@ -9169,7 +9169,10 @@
         "pair": "Pair owner",
         "paired": "Owner paired: {{id}}",
         "inactive": "MAX is not running. Check its settings and secrets.",
-        "code_hint": "This code expires in five minutes. Send this command to the bot in a private chat."
+        "code_hint": "This code expires in five minutes. Send this command to the bot in a private chat.",
+        "subscribe": "Register webhook",
+        "subscribed": "Webhook registered. Delivery is not yet tested.",
+        "subscription_hint": "Uses the HTTPS address set in Settings. Register again after changing the webhook secret."
       },
       "mobileLoginCard": {
         "sign_in_on_mobile": "Sign in on mobile",

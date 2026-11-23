@@ -26,9 +26,7 @@ async def maybe_start_max(orch):
 
     def save(uid):
         overlay = config_local_path()
-        if overlay.exists() and "max" in json.loads(
-            overlay.read_text(encoding="utf-8")
-        ):
+        if overlay.exists() and "max" in json.loads(overlay.read_text(encoding="utf-8")):
             raise ValueError("Move MAX settings to the base config before pairing")
 
         def mutate(data):

@@ -7,12 +7,14 @@ import ipaddress
 import json
 import os
 import sqlite3
+import stat
 from contextlib import contextmanager
 from urllib.parse import urlsplit
 
 from aiohttp import web
 
 from kiro_crew.dashboard.token_auth_paths import MAX_WEBHOOK_PATH
+from kiro_crew.platform_compat import open_create_no_reparse, open_file_no_reparse
 
 MAX_BODY = 65536
 
@@ -45,9 +47,17 @@ def subscription_url(origin):
 class WebhookInbox:
     def __init__(self, path):
         self.path = path
-        path.parent.mkdir(parents=True, exist_ok=True)
-        fd = os.open(path, os.O_CREAT | os.O_WRONLY, 0o600)
-        os.close(fd)
+        path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        if path.parent.is_symlink():
+            raise PermissionError("MAX inbox directory must not be a link")
+        parent = path.parent.stat()
+        if os.name == "posix" and (parent.st_uid != os.getuid() or parent.st_mode & 0o022):
+            raise PermissionError("MAX inbox directory must be owner-controlled")
+        fd = open_create_no_reparse(path)
+        try:
+            self._identity = self._check(fd)
+        finally:
+            os.close(fd)
         with self._db() as db:
             db.execute(
                 "CREATE TABLE IF NOT EXISTS inbox (key TEXT PRIMARY KEY, body TEXT, state TEXT NOT NULL)"
@@ -55,12 +65,34 @@ class WebhookInbox:
 
     @contextmanager
     def _db(self):
-        db = sqlite3.connect(self.path, timeout=1)
+        fd = open_file_no_reparse(self.path, nonblocking=True)
         try:
-            with db:
-                yield db
+            if self._check(fd) != self._identity:
+                raise PermissionError("MAX inbox identity changed")
+            # shortcut: SQLite reopens by name; hostile same-UID writers require OS isolation.
+            db = sqlite3.connect(self.path, timeout=1)
+            try:
+                current = self.path.lstat()
+                if (
+                    stat.S_ISLNK(current.st_mode)
+                    or (current.st_dev, current.st_ino) != self._identity
+                ):
+                    raise PermissionError("MAX inbox changed while opening")
+                with db:
+                    yield db
+            finally:
+                db.close()
         finally:
-            db.close()
+            os.close(fd)
+
+    @staticmethod
+    def _check(fd):
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            raise PermissionError("MAX inbox must be a regular file with one link")
+        if os.name == "posix" and (info.st_uid != os.getuid() or info.st_mode & 0o077):
+            raise PermissionError("MAX inbox requires owner-only permissions")
+        return info.st_dev, info.st_ino
 
     @staticmethod
     def key(raw):
@@ -79,16 +111,9 @@ class WebhookInbox:
             db.execute("BEGIN IMMEDIATE")
             if db.execute("SELECT 1 FROM inbox WHERE key=?", (key,)).fetchone():
                 return key
-            if (
-                db.execute("SELECT count(*) FROM inbox WHERE state!='done'").fetchone()[
-                    0
-                ]
-                >= 256
-            ):
+            if db.execute("SELECT count(*) FROM inbox WHERE state!='done'").fetchone()[0] >= 256:
                 raise OverflowError("MAX inbox full")
-            db.execute(
-                "INSERT INTO inbox VALUES (?, ?, 'pending')", (key, json.dumps(raw))
-            )
+            db.execute("INSERT INTO inbox VALUES (?, ?, 'pending')", (key, json.dumps(raw)))
         return key
 
     def next(self):
@@ -116,16 +141,19 @@ class WebhookInbox:
     def seen(self, key):
         with self._db() as db:
             return (
-                db.execute(
-                    "SELECT 1 FROM inbox WHERE key=? AND state='done'", (key,)
-                ).fetchone()
+                db.execute("SELECT 1 FROM inbox WHERE key=? AND state='done'", (key,)).fetchone()
                 is not None
             )
 
     def complete_control(self, key):
         with self._db() as db:
-            db.execute("INSERT OR IGNORE INTO inbox VALUES (?, NULL, 'done')", (key,))
-        self.mark(key, "done")
+            inserted = db.execute(
+                "INSERT OR IGNORE INTO inbox VALUES (?, NULL, 'done')", (key,)
+            ).rowcount
+            db.execute(
+                "DELETE FROM inbox WHERE state='done' AND rowid NOT IN (SELECT rowid FROM inbox WHERE state='done' ORDER BY rowid DESC LIMIT 4096)"
+            )
+        return bool(inserted)
 
 
 class MaxWebhook:
@@ -171,10 +199,10 @@ class MaxWebhook:
         if control:
             async with self._control_lock:
                 key = self.inbox.key(raw)
-                if await asyncio.to_thread(self.inbox.seen, key):
+                # Consume before a verdict: a crash must never approve a later tool.
+                if not await asyncio.to_thread(self.inbox.complete_control, key):
                     return
                 await self.transport.receive(raw)
-                await asyncio.to_thread(self.inbox.complete_control, key)
             return
         user = message.get("sender") or {}
         if (
@@ -224,9 +252,12 @@ class MaxWebhook:
                 if task:
                     await asyncio.shield(task)
             except asyncio.CancelledError:
-                if asyncio.current_task().cancelling():
+                current = asyncio.current_task()
+                if current is not None and current.cancelling():
                     raise
-            except Exception:  # noqa: BLE001 -- leave an uncertain turn for a restart notice, never auto-replay tools
+            except (
+                Exception
+            ):  # noqa: BLE001 -- leave an uncertain turn for a restart notice, never auto-replay tools
                 await asyncio.sleep(5)
                 continue
             await asyncio.to_thread(self.inbox.mark, key, "done")
@@ -273,9 +304,7 @@ async def api_max_webhook(request):
     if worker is not None and worker.done():
         return web.Response(status=503)
     supplied = request.headers.get("X-Max-Bot-Api-Secret", "")
-    if len(supplied) > 256 or not hmac.compare_digest(
-        supplied.encode(), service.secret.encode()
-    ):
+    if len(supplied) > 256 or not hmac.compare_digest(supplied.encode(), service.secret.encode()):
         return web.Response(status=401)
     from kiro_crew.dashboard.handlers._shared import read_bounded_json
 

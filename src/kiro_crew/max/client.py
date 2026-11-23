@@ -4,8 +4,14 @@ import asyncio
 import hashlib
 import json
 from pathlib import Path
+from typing import Any, TypedDict
 
 API_ORIGIN = "https://platform-api2.max.ru"
+
+
+class PollState(TypedDict):
+    marker: int | None
+    seen: list[str]
 
 
 class MaxClient:
@@ -16,7 +22,8 @@ class MaxClient:
         self._http = None
         self._task = None
         self.on_close = None
-        self._state = {"marker": None, "seen": []}
+        self.dispatcher: Any = None
+        self._state: PollState = {"marker": None, "seen": []}
         if self.cursor.exists():
             self._state = json.loads(self.cursor.read_text(encoding="utf-8"))
         self.marker = self._state["marker"]
@@ -32,15 +39,11 @@ class MaxClient:
     async def handle_page(self, page):
         for update in page.get("updates", []):
             # Fingerprints retain no message content, pairing codes or callbacks.
-            key = hashlib.sha256(
-                json.dumps(update, sort_keys=True).encode()
-            ).hexdigest()
+            key = hashlib.sha256(json.dumps(update, sort_keys=True).encode()).hexdigest()
             if key in self._state["seen"]:
                 continue
             await self.receive(update)
-            self._checkpoint(
-                {"marker": self.marker, "seen": (self._state["seen"] + [key])[-4096:]}
-            )
+            self._checkpoint({"marker": self.marker, "seen": (self._state["seen"] + [key])[-4096:]})
         self._checkpoint({"marker": page["marker"], "seen": self._state["seen"]})
 
     async def request(self, method, path, *, params=None, body=None):
@@ -91,9 +94,7 @@ class MaxClient:
                 }
                 if self.marker is not None:
                     params["marker"] = self.marker
-                await self.handle_page(
-                    await self.request("GET", "/updates", params=params)
-                )
+                await self.handle_page(await self.request("GET", "/updates", params=params))
             except asyncio.CancelledError:
                 raise
             except Exception:  # noqa: BLE001 -- retain the checkpoint and retry a failed page

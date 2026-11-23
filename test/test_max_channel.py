@@ -86,6 +86,25 @@ class Wire:
 
 
 @pytest.mark.asyncio
+async def test_revocation_stops_remaining_output_chunks():
+    from kiro_crew.max.access import OwnerAccess
+    from kiro_crew.max.transport import MaxTransport
+
+    access = OwnerAccess([42], lambda uid: None)
+    sent = []
+
+    async def send(uid, text):
+        sent.append(text)
+        access.reload([], enabled=False)
+        return "first-chunk"
+
+    transport = MaxTransport(SimpleNamespace(send=send), access, None, None)
+    with pytest.raises(PermissionError):
+        await transport.send_message("42", "word " * 2000)
+    assert len(sent) == 1
+
+
+@pytest.mark.asyncio
 async def test_messages_callbacks_and_starts_gate_owner_and_private_chat():
     from kiro_crew.max.access import OwnerAccess
     from kiro_crew.max.transport import MaxTransport
@@ -99,9 +118,7 @@ async def test_messages_callbacks_and_starts_gate_owner_and_private_chat():
     async def callback(raw):
         callbacks.append(raw)
 
-    transport = MaxTransport(
-        Wire(), OwnerAccess([42], lambda uid: None), dispatch, callback
-    )
+    transport = MaxTransport(Wire(), OwnerAccess([42], lambda uid: None), dispatch, callback)
     await transport.receive(message(99))
     await transport.receive(message(kind="chat"))
     await transport.receive(message(kind="channel"))
@@ -224,9 +241,7 @@ async def test_dispatch_uses_shared_turn_and_isolates_agent_session(monkeypatch)
     sessions = SimpleNamespace(is_busy=lambda key: False, max_generation=lambda key: 0)
     cfg = SimpleNamespace(agent=SimpleNamespace(default="auto"))
     router = dispatch.MaxDispatcher(sessions, None, cfg)
-    router.transport = MaxTransport(
-        Wire(), OwnerAccess([42], lambda uid: None), None, None
-    )
+    router.transport = MaxTransport(Wire(), OwnerAccess([42], lambda uid: None), None, None)
     inbound = InboundMessage("max", "42", "42", "hello")
     await router.handle_message(inbound)
     assert turns[0].channel_type == "max"
@@ -268,9 +283,7 @@ async def test_login_requires_external_https_and_uses_existing_token(monkeypatch
         login_link("https://crew.example.org", 42, "dashboard-owner")
         == "https://crew.example.org/?token=synthetic-link"
     )
-    assert issued == [
-        ("dashboard-owner", {"ttl_seconds": 300, "extra": {"owner_mint": "1"}})
-    ]
+    assert issued == [("dashboard-owner", {"ttl_seconds": 300, "extra": {"owner_mint": "1"}})]
     with pytest.raises(ValueError):
         login_link("https://crew.example.org", 42, None)
 
@@ -295,9 +308,7 @@ async def test_successful_callback_only_reaches_owner_handler():
     async def callback(raw):
         callbacks.append(raw["callback"]["payload"])
 
-    transport = MaxTransport(
-        Wire(), OwnerAccess([42], lambda uid: None), None, callback
-    )
+    transport = MaxTransport(Wire(), OwnerAccess([42], lambda uid: None), None, callback)
     raw = message()
     raw["update_type"] = "message_callback"
     raw["callback"] = {"user": {"user_id": 42}, "payload": "old", "callback_id": "id"}
@@ -332,14 +343,10 @@ async def test_renderer_delivers_text_and_approval_round_trip():
         deliver_verdict("max:test", "approve", "42")
 
     answer_task = asyncio.create_task(answer())
-    assert await TextReplyApprovalDecider("max:test")(
-        SimpleNamespace(request_id="req1")
-    )
+    assert await TextReplyApprovalDecider("max:test")(SimpleNamespace(request_id="req1"))
     await answer_task
     # A finished entry is gone: a replay cannot approve a later request.
-    assert not await TextReplyApprovalDecider("max:test")(
-        SimpleNamespace(request_id="req1")
-    )
+    assert not await TextReplyApprovalDecider("max:test")(SimpleNamespace(request_id="req1"))
 
 
 @pytest.mark.asyncio
@@ -395,9 +402,7 @@ async def test_pairing_endpoint_refuses_app_and_requires_owner(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_factory_pairing_persists_owner_and_live_revocation(
-    tmp_path, monkeypatch
-):
+async def test_factory_pairing_persists_owner_and_live_revocation(tmp_path, monkeypatch):
     import json
 
     from kiro_crew.config.loader import KiroCrewConfig
@@ -407,9 +412,7 @@ async def test_factory_pairing_persists_owner_and_live_revocation(
 
     monkeypatch.setenv("KIROCREW_HOME", str(tmp_path))
     (tmp_path / "config.json").write_text(
-        json.dumps(
-            {"max": {"enabled": True, "allowed_user_ids": []}, "keep": {"value": 1}}
-        ),
+        json.dumps({"max": {"enabled": True, "allowed_user_ids": []}, "keep": {"value": 1}}),
         encoding="utf-8",
     )
 
@@ -436,9 +439,9 @@ async def test_factory_pairing_persists_owner_and_live_revocation(
         code = transport.access.issue()
         await transport.receive(message(text=f"/start {code}"))
         assert KiroCrewConfig.load().max.allowed_user_ids == [42]
-        assert json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))[
-            "keep"
-        ] == {"value": 1}
+        assert json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))["keep"] == {
+            "value": 1
+        }
 
         def revoke(data):
             data["max"]["allowed_user_ids"] = [99]
@@ -561,9 +564,7 @@ async def test_shared_agent_new_and_stop_commands_keep_session_binding(monkeypat
     router = dispatch.MaxDispatcher(
         sessions, None, SimpleNamespace(agent=SimpleNamespace(default="auto"))
     )
-    router.transport = MaxTransport(
-        Wire(), OwnerAccess([42], lambda uid: None), None, None
-    )
+    router.transport = MaxTransport(Wire(), OwnerAccess([42], lambda uid: None), None, None)
 
     async def agent(picks, route, arg, **kwargs):
         calls.append(("agent", route, arg, kwargs["session_key"]()))

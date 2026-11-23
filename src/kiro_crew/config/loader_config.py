@@ -312,7 +312,9 @@ class KiroCrewConfig:
         default_factory=WeComConfig,
         metadata=_meta("WeCom", "WeCom (企业微信) AI-bot integration settings.", tags=["wecom"]),
     )
-    max: MaxConfig = field(default_factory=MaxConfig, metadata=_meta("MAX", "Owner-only MAX channel."))
+    max: MaxConfig = field(
+        default_factory=MaxConfig, metadata=_meta("MAX", "Owner-only MAX channel.")
+    )
     telegram: TelegramConfig = field(
         default_factory=TelegramConfig,
         metadata=_meta("Telegram", "Telegram Bot API integration settings.", tags=["telegram"]),

@@ -22,9 +22,17 @@ the registered transport, preventing acknowledgement by a stopped inbox.
 Webhook messages from the admitted owner are screened and durably admitted to
 `<data home>/max/inbox.sqlite` before HTTP 200. The file is created mode 0600;
 the inbox admits at most 256 pending entries and retains 4096 done fingerprints.
+Existing public-permission files, leaf/parent symlinks, hardlink aliases and
+changed file identity refuse startup or access. This is not a complete same-UID
+filesystem boundary: SQLite reopens by pathname and its journal remains subject
+to local replacement races. See the [candidate runbook](../../guides/max-candidate.md)
+for the required OS isolation review and unverified platform ACLs.
 Message/callback IDs identify retries. The queue worker waits for the shared
 turn task; approvals and Stop are handled separately so they can answer a waiting
-tool. Controls retain fingerprints only: pairing codes, callback payloads and
+tool. Controls consume their durable fingerprint before execution: a crash after
+applying a verdict cannot replay it against a later tool. A crash before a control
+finishes may require the owner to send a new command. Controls retain fingerprints
+only: pairing codes, callback payloads and
 generated dashboard links are never queued. On restart, pending turns can start;
 an entry marked running produces an interruption notice rather than replaying
 tools. The effect/checkpoint crash gap still prevents an exactly-once claim.
@@ -39,13 +47,18 @@ not assert a live MAX connection; the generic `connected` flag remains false.
 For production setup after review: save a separate `MAX_WEBHOOK_SECRET` through
 Secrets, set `max.delivery_mode=webhook`, and arrange the chosen external HTTPS
 origin on port 443 with a trusted certificate. Configure `dashboard.url` to this
-origin. An explicit host-owner same-origin POST `/api/max/subscription` then calls
+origin. Press **Register webhook** in **Settings → Channels → MAX**; no browser
+console is required. The shared API client sends the explicit host-owner
+same-origin POST `/api/max/subscription`, which calls
 MAX `POST /subscriptions` using the existing bot credential and the secret.
 It accepts no URL or token from the request body and refuses a missing/non-HTTPS,
 private-literal or non-443 origin before making a vendor request. This setup
 action is not run by the source patch or its mock tests. Rotating the webhook
 secret requires explicitly registering the subscription again. See the official
 [subscription contract](https://dev.max.ru/docs-api/methods/POST/subscriptions).
+The notice only confirms subscription registration, never live delivery. Follow
+the [isolated candidate and live procedure](../../guides/max-candidate.md)
+before installing a reviewed candidate or registering a real subscription.
 
 The polling-specific notes below describe the development mode.
 

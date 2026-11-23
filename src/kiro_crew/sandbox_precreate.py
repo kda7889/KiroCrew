@@ -559,6 +559,7 @@ _CREW_PRECREATE_READONLY_FILE_LEAVES: tuple[str, ...] = (
 #: existing empty root as usable, and proves the root writable before certifying
 #: any clone, so materialising it early changes nothing it relies on.
 _CREW_PRECREATE_HIDDEN_DIR_LEAVES: tuple[str, ...] = (
+    "max",  # The mask must exist before MAX starts or creates a journal.
     "aws-control-staging",
     # Kiro Space store sign-ins: the store CLI creates the folder on the first sign-in,
     # usually while sessions already run, so it is made empty before the first spawn.

@@ -19432,7 +19432,10 @@
         "pair": "Eigentümer verknüpfen",
         "paired": "Eigentümer verknüpft: {{id}}",
         "inactive": "MAX läuft nicht. Prüfen Sie die Einstellungen und Geheimnisse.",
-        "code_hint": "Dieser Code läuft nach fünf Minuten ab. Senden Sie diesen Befehl dem Bot in einem privaten Chat."
+        "code_hint": "Dieser Code läuft nach fünf Minuten ab. Senden Sie diesen Befehl dem Bot in einem privaten Chat.",
+        "subscribe": "Webhook registrieren",
+        "subscribed": "Webhook registriert. Die Zustellung wurde noch nicht geprüft.",
+        "subscription_hint": "Verwendet die HTTPS-Adresse aus den Einstellungen. Nach Änderung des Webhook-Geheimnisses erneut registrieren."
       },
       "mobileLoginCard": {
         "sign_in_on_mobile": "Auf dem Mobilgerät anmelden",

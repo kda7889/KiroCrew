@@ -70,8 +70,6 @@ def render(path):
 
 if __name__ == "__main__":
     print(
-        render(
-            Path(__file__).resolve().parents[1] / "docs/architecture/max-owner.bpmn"
-        ),
+        render(Path(__file__).resolve().parents[1] / "docs/architecture/max-owner.bpmn"),
         end="",
     )

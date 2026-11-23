@@ -19955,7 +19955,10 @@
         "pair": "Associer le propriétaire",
         "paired": "Propriétaire associé : {{id}}",
         "inactive": "MAX ne fonctionne pas. Vérifiez ses paramètres et ses secrets.",
-        "code_hint": "Ce code expire dans cinq minutes. Envoyez cette commande au bot dans une conversation privée."
+        "code_hint": "Ce code expire dans cinq minutes. Envoyez cette commande au bot dans une conversation privée.",
+        "subscribe": "Enregistrer le webhook",
+        "subscribed": "Webhook enregistré. La livraison reste à tester.",
+        "subscription_hint": "Utilise l’adresse HTTPS des paramètres. Réenregistrez après avoir changé le secret du webhook."
       },
       "mobileLoginCard": {
         "sign_in_on_mobile": "Se connecter sur mobile",

@@ -19955,7 +19955,10 @@
         "pair": "Vincular proprietário",
         "paired": "Proprietário vinculado: {{id}}",
         "inactive": "O MAX não está ativo. Verifique as configurações e os segredos.",
-        "code_hint": "Este código expira em cinco minutos. Envie este comando ao bot em uma conversa privada."
+        "code_hint": "Este código expira em cinco minutos. Envie este comando ao bot em uma conversa privada.",
+        "subscribe": "Registrar webhook",
+        "subscribed": "Webhook registrado. A entrega ainda não foi testada.",
+        "subscription_hint": "Usa o endereço HTTPS das configurações. Registre novamente após mudar o segredo do webhook."
       },
       "mobileLoginCard": {
         "sign_in_on_mobile": "Entrar no celular",

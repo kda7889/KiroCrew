@@ -19104,13 +19104,6 @@
       "uptime": "[Ùþţìɱè ·········]"
     },
     "settings": {
-      "maxPanel": {
-        "guide": "[Add the bot token in Settings → Secrets, then enable MAX.]",
-        "pair": "[Pair owner]",
-        "paired": "[Owner paired: {{id}}]",
-        "inactive": "[MAX is not running. Check its settings and secrets.]",
-        "code_hint": "[This code expires in five minutes. Send this command to the bot in a private chat.]"
-      },
       "aboutPanel": {
         "a_new_version": "[À ñèẁ ṽèŕşìøñ ············]",
         "a_newer_version_is_available": "[À ñèẁèŕ ṽèŕşìøñ ìş àṽàìĺàƀĺè. ····················]",
@@ -21827,6 +21820,16 @@
         "tokens_count_one": "[{{count}} àççèşş ţøķèñ ············]",
         "tokens_count_other": "[{{count}} àççèşş ţøķèñş ·············]",
         "could_not_read_webhook_status": "[Çøùĺð ñøţ ŕèàð ẁèƀĥøøķ şţàţùş — çĥèçķ ţĥàţ ţĥè ğàţèẁàý ìş ŕùññìñğ ·······················]"
+      },
+      "maxPanel": {
+        "guide": "[Àðð ţĥè ƀøţ ţøķèñ ìñ Şèţţìñğş → Şèçŕèţş, ţĥèñ èñàƀĺè ṀÀẊ. ····················]",
+        "pair": "[Þàìŕ øẁñèŕ ···············]",
+        "paired": "[Øẁñèŕ þàìŕèð: {{id}} ·············]",
+        "inactive": "[ṀÀẊ ìş ñøţ ŕùññìñğ. Çĥèçķ ìţş şèţţìñğş àñð şèçŕèţş. ··················]",
+        "code_hint": "[Ţĥìş çøðè èẋþìŕèş ìñ ƒìṽè ɱìñùţèş. Şèñð ţĥìş çøɱɱàñð ţø ţĥè ƀøţ ìñ à þŕìṽàţè çĥàţ. ·························]",
+        "subscribe": "[Ŕèğìşţèŕ ẁèƀĥøøķ ··············]",
+        "subscribed": "[Ẁèƀĥøøķ ŕèğìşţèŕèð. Ðèĺìṽèŕý ìş ñøţ ýèţ ţèşţèð. ························]",
+        "subscription_hint": "[Ùşèş ţĥè ĤŢŢÞŞ àððŕèşş şèţ ìñ Şèţţìñğş. Ŕèğìşţèŕ àğàìñ àƒţèŕ çĥàñğìñğ ţĥè ẁèƀĥøøķ şèçŕèţ. ···························]"
       },
       "mobileLoginCard": {
         "sign_in_on_mobile": "[Şìğñ ìñ øñ ɱøƀìĺè ···············]",
