@@ -19,12 +19,38 @@ frontend build in a resource window that permits them. The working report lists
 the gates actually run and those still missing; component mocks are not a whole
 SPA or browser proof. Never use 0.13.1 frontend assets to fill a candidate build.
 
+Use the project's lightest applicable gate first. The API factory and its real
+`ClientTransport` can be type-checked without loading the dashboard facade;
+the existing facade composition test checks that MAX's methods reach that facade
+unchanged. Target its MAX transport cases to prove relative same-origin paths and
+empty POST bodies. These checks do not replace the complete panel/SPA typecheck.
+
+The earlier 640/1024 MiB heap failures are historical attempts, not required
+budgets or readiness conditions. Do not replay them. When resource status permits
+the remaining graph-wide work, run `npm run typecheck`, then
+`npm run gen:ui -- --check`, sequentially using normal project/runtime defaults.
+If the latter reports stale output, run `npm run gen:ui`, review and commit the
+generated changes, then check again. Do not use warning-only mode as a passing
+freshness gate. No arbitrary wall-clock deadline is part of this procedure;
+pairing/login expiry and protocol timeouts remain security requirements.
+
 The root CONTRIBUTING guide and install guide own `make build` and its dependency
 setup. A sparse checkout must first materialize their Makefile, packaging files
 and frontend inputs. Do not build from a partly downloaded tree. Neither a failed
 download nor a missing tool is a passing gate.
 
 ## Isolated candidate, only after source review
+
+The next step after green source gates is to review a pinned candidate-install
+plan: full commit/base/package versions, isolated data/venv, chosen free loopback
+port, and stop/rollback steps. Before any real MAX setup, verify the candidate's
+own built Settings shell with MAX disabled and no channel credentials: the owner
+sees the setup hint and disabled pairing action, and non-owner API requests deny.
+Use local fixtures for active pairing/subscription UI flows; do not register a
+subscription to test a button. Do not copy the live home's files, vault, signing
+keys, tokens or frontend assets. If bootstrap asks for an unrelated provider
+sign-in, stop that step and use the fixture-backed UI check; do not alter the live
+provider account to satisfy this preflight.
 
 Run these steps in the source checkout only after the remaining gates and a
 candidate-install decision. They are not instructions to change the current

@@ -213,6 +213,21 @@ describe('api facade composition', () => {
   })
 })
 
+describe('MAX owner settings transport', () => {
+  it.each([
+    ['getMaxConfig', '/api/max/config', 'GET'],
+    ['issueMaxPairing', '/api/max/pairing', 'POST'],
+    ['registerMaxSubscription', '/api/max/subscription', 'POST'],
+  ] as const)('%s uses the shared facade and sends no credential or URL input', async (method, path, verb) => {
+    await api[method]()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe(path)
+    expect(init.method ?? 'GET').toBe(verb)
+    if (verb === 'POST') expect(JSON.parse(init.body as string)).toEqual({})
+  })
+})
+
 describe('members that send no X-Session-Key', () => {
   it.each(NO_SESSION_KEY)('%s', async (name) => {
     // A dotted name is a member of a nested namespace (`teams.list`).
