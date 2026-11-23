@@ -6,6 +6,7 @@ they explain structure and rationale and link out to
 
 | Document | Covers |
 |---|---|
+| [MAX owner pairing](max-owner.bpmn), [SVG](max-owner.svg) | Descriptive, non-executable pairing flow with roles, expiry and durable owner save. |
 | [overview.md](overview.md) | System diagrams, the component map, and the subsystem-to-spec index. Start here. |
 | [mcp.md](mcp.md) | MCP server discovery, tool management, the MCP-first rule, and the tool-statelessness invariant. |
 | [agent-mcp-and-skill-reach.md](agent-mcp-and-skill-reach.md) | Which MCP servers and skills the conductors and workers of conductor mode and of crewmates mount, and whether a newly installed server or skill reaches each. |

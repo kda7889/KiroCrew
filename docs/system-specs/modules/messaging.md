@@ -2,6 +2,113 @@
 
 ## Overview
 
+### MAX development channel
+
+The `max` channel is an owner-only, text-only development adapter. It uses
+`https://platform-api2.max.ru`, TLS verification, and the Authorization header.
+Its factory is registered in `channels.py`; `max.enabled` defaults to false.
+`MAX_BOT_TOKEN` is a gateway credential, supports a vault `secret://` reference,
+and is withheld from agent subprocesses. No MAX token belongs in `config.json`.
+
+MAX explicitly limits GET /updates long polling to development and testing;
+production requires Webhook. This adapter implements polling only. It does not
+register a webhook, change a listener, open a port, install certificates, or
+change the configured external dashboard origin. See the official
+[updates contract](https://dev.max.ru/docs-api/methods/GET/updates) and
+[API schema](https://github.com/max-messenger/api-schema).
+
+`max.allowed_user_ids` must contain exactly one positive integer. Empty means
+deny all until an operator pairs; malformed or multiple owners deny all.
+Messages, callbacks and bot-start events require a private dialog and a numeric
+owner. Start events verify the chat type through GET /chats/{chat_id}. An unknown
+sender is never automatically trusted. Callback payloads cannot approve tools.
+All outbound transport targets require the same owner. The live config is read
+before inbound handling and sending so owner removal and disablement revoke
+access. Authorization is also subject to the shared `channels` governance gate.
+
+An authenticated **host owner**, with a same-origin dashboard POST, calls
+`/api/max/pairing`. App tokens and Shared Crew teammates cannot issue a code.
+The response is `no-store`; the code has 192 bits of randomness, a five-minute
+TTL, five attempts and single-use semantics. Only its SHA-256 digest is held in
+memory. A private `/start <code>` atomically saves the numeric sender using the
+config writer's advisory lock. Codes expire on restart, replacement or use.
+If persistence fails, no owner is granted and the code remains consumed.
+The descriptive [pairing model](../../architecture/max-owner.bpmn) and
+[SVG](../../architecture/max-owner.svg) show these roles and failure paths.
+
+The channel uses the shared `drive_turn`, `ConversationState`, agent picker,
+generation seeding, credential redaction, typed approval registry and history.
+It has no new approval grant. `/approve`, `/deny` and the shared typed replies
+answer only the current session's pending request; missing or expired requests
+deny. `/stop` records the user's stop and asks the session manager to stop before
+cancelling the adapter task. `/new` reserves its generation durably. The namespace
+is per channel and peer; it never folds MAX into a cross-channel unified bucket.
+`/sessions` shows recent MAX sessions; `/agent [name]` selects the shared agent
+bucket. Arbitrary dashboard-session adoption, group chats, uploads, buttons,
+streaming edits and a channel-specific status card are not implemented.
+
+`/web` and `/mobile` mint the existing dashboard login token with a 300-second
+session TTL. They require a configured external HTTPS `dashboard.url`; loopback
+and private IP literals are refused. The existing one-time URL-to-cookie exchange
+handles expiry and replay. The signed subject is the live dashboard owner's ID
+(or its existing `local-app` bootstrap subject), with the existing owner-mint
+claim. It is never guessed from the MAX numeric ID. Missing dashboard owner
+state refuses issuance. The channel neither extracts gateway credentials nor
+changes any listener. The link is a bearer credential: transfer it only to the
+owner's browser. This intentional login delivery bypasses ordinary credential
+masking, just as the Telegram login command does.
+
+Polling checkpoints live under `<data home>/max/cursor.json`. Each update is
+fingerprinted after its handler returns; the page marker is committed only
+after all handlers succeed. Successful entries in a partly failed page survive
+restart and are skipped on retry. The journal keeps 4096 fingerprints and no
+message text or codes. Checkpoints use atomic replacement. This is not exactly-once
+execution: a crash between an external effect and checkpoint can repeat it.
+Turn dispatch acknowledges task admission, not model completion; an abrupt process
+kill after admission can interrupt a reply. On graceful cancellation the shared
+turn path handles its inbound route. One process may poll a bot; do not run two
+gateways or combine polling with a MAX webhook subscription.
+
+#### Operator runbook (after source review and separate rollout approval)
+
+1. Revoke the token exposed in chat. Create its replacement in MAX's operator
+   UI. Do not paste it into chat, a command argument, a patch or this document.
+2. Review this source branch. Install it only into a separate development
+   environment first, using the normal project install procedure. Do not replace
+   a running gateway as part of this patch review.
+3. In that environment's **Settings → Secrets**, add a Secret named `max-bot`.
+   Enter the replacement token there. Set the gateway credential mapping to
+   `MAX_BOT_TOKEN=secret://max-bot` in the operator-managed environment. That line
+   contains a vault reference, never the token. Restart only that approved dev
+   gateway after wiring its environment.
+4. In Settings' configuration editor, set `max.enabled=true` and leave
+   `max.allowed_user_ids=[]`. Keep MAX fields in the base configuration, not
+   `config.local.json`, for pairing. The channel still denies unknown senders.
+5. From the signed-in host owner's dashboard browser, run the following
+   same-origin request in the browser console. Keep the returned code private:
+
+   ```javascript
+   await fetch('/api/max/pairing', {method: 'POST'}).then(r => r.json())
+   ```
+
+6. Within five minutes, send `/start <code>` to `@id2311384963_bot` from the
+   owner's MAX account in a private dialog. A bare `/start` grants nothing.
+   Confirm that Settings contains exactly that numeric user ID. A second account
+   and all groups must remain denied.
+7. Test `/help`, `/agent`, a harmless question, a tool approval, `/deny`, `/stop`,
+   `/new` and `/sessions`. Test an expired/reused code and another account's
+   callback. No live MAX smoke test is part of the offline source test suite.
+8. To enable `/mobile`, first configure `dashboard.url` to an already working
+   external HTTPS origin through the normal mobile Settings flow. Without one,
+   the command explains the missing setting and issues no link. Request `/mobile`,
+   open its link once, and verify an expired or reused link is refused.
+9. To revoke access, set `max.enabled=false` or remove its owner. To re-pair,
+   explicitly remove the old numeric owner in Settings and issue a fresh code.
+   No automatic account takeover occurs.
+
+Never describe this polling adapter as production-ready. A reviewed webhook
+implementation and an owner-chosen external HTTPS deployment remain separate.
+
 `kiro_crew.messaging` is the channel-neutral transport abstraction used by the shipped Slack, Discord, Telegram, Webex, WeCom, Microsoft Teams, Weixin, iMessage, WhatsApp, and Feishu integrations; its conservative contract also leaves room for a further channel. It avoids re-implementing streaming, tool approval, session identity, or rendering for each integration. It holds the channel-neutral core of the Slack turn loop (`slack/handler.py::handle_message`) so a new channel implements only two small interfaces (a `MessagingTransport` + a `Renderer`) and inherits everything else.
 
 **Dependency direction is one-way:** `slack` / `dashboard` → `messaging`, never the reverse. The `kiro_crew.messaging` package imports nothing from `kiro_crew.slack` or `kiro_crew.dashboard`; its first-party dependencies are shared lower-level modules, among them `acp.types` event constants, the `security` redactors (`redact_credentials` / `redact_exfiltration_urls`), `sel` for audit, and, function-locally from `privacy_mode`, `session_map` (the durable flag) and `history` (the transcript header the mode is stamped into). The one pinned exception: `messaging/dispatch.py` imports `kiro_crew.dashboard.session_directive_apply` function-locally, allowlisted in `test_messaging_import_purity.py`.

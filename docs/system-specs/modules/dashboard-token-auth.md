@@ -60,6 +60,12 @@ surfaces, and `X-Session-Key: dashboard:ui` stays correlation metadata.
 
 ## Architecture
 
+MAX's owner-only `/web` and `/mobile` commands call `generate_token` with a
+300-second TTL and use the existing URL-to-cookie exchange. They require an
+operator-configured external HTTPS dashboard origin and have no localhost
+fallback. The bot token is never used as dashboard authentication. See
+[MAX development channel](messaging.md#max-development-channel).
+
 The sequence below is the Slack implementation. Telegram, Teams and Webex call
 `generate_token()` directly and keep the credential in a direct conversation.
 

@@ -2,6 +2,11 @@
 
 ## Overview
 
+`POST /api/max/pairing` is labelled `max.pairing.issue`, unstable. It requires
+the signed-in host owner and a matching browser Origin. It refuses app tokens
+and teammates, returns `no-store`, and never returns a bot token. The code's
+TTL and retry contract is in [messaging](messaging.md#max-development-channel).
+
 An HTTP route the gateway registers can carry a label: what it does (an **action
 name**, such as `widgets.reset`) and how long its request and response shape is
 promised (a **tier**). This spec says where a label is recorded and how to pick its

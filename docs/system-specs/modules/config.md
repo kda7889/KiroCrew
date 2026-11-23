@@ -2,6 +2,12 @@
 
 ## Overview
 
+MAX uses the typed `MaxConfig` section: `enabled` defaults false and
+`allowed_user_ids` defaults empty. The single owner is never coerced from a
+string. Its token is the vault-capable `MAX_BOT_TOKEN` gateway credential,
+never a config field. Pairing uses the locked config read-modify-write primitive.
+See [the messaging runbook](messaging.md#max-development-channel).
+
 The config package loads runtime configuration from `~/.kiro/crew/config.json`
 using stdlib dataclasses with sensible defaults. `config/sections.py` and
 `config/loader.py` are the two facades callers import. Each composes the owner

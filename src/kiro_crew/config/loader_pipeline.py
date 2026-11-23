@@ -20,10 +20,9 @@ from typing import Any
 import kiro_crew.config.resolution as _resolution
 from kiro_crew.atomic_write import atomic_write
 from kiro_crew.aws_project_profiles import coerce_project_profiles
-from kiro_crew.config import loosening_provenance
+from kiro_crew.config import loosening_provenance, windows_exec_adoption
 from kiro_crew.config import migration as _migration
 from kiro_crew.config import sections as _sections
-from kiro_crew.config import windows_exec_adoption
 from kiro_crew.config.fields import _coerce_bool, _safe_str
 from kiro_crew.config.integration_sections import (
     AppSettingsConfig,
@@ -148,6 +147,7 @@ from kiro_crew.config.sections import (
     _validate_activation,
     coerce_effort,
 )
+from kiro_crew.config.sections_max import MaxConfig
 from kiro_crew.config.superseded_defaults import SupersededDefault, auto_adoptable
 from kiro_crew.config.validation import _CONFIG_CACHE
 from kiro_crew.config.validation import validate_config_data as _validate_config_data
@@ -1274,6 +1274,10 @@ def build_config(
         telemetry=_build_telemetry_config(telemetry_data),
         memory=_build_memory_config(memory_data),
         knowledge=_build_knowledge_config(knowledge_data),
+        max=MaxConfig(
+            enabled=_sections.SectionReader(MaxConfig, _coerced_section(data, "max", _degraded)).read("enabled", _safe_bool),
+            allowed_user_ids=_sections.SectionReader(MaxConfig, _coerced_section(data, "max", _degraded)).get("allowed_user_ids"),
+        ),
         telegram=_build_telegram_config(telegram_data),
         weixin=_build_weixin_config(weixin_data),
         whatsapp=_build_whatsapp_config(whatsapp_data),

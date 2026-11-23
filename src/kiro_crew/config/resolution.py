@@ -49,6 +49,7 @@ _KNOWN_CONFIG_SECTIONS: frozenset = frozenset(
         "slack",
         "publish",
         "telegram",
+        "max",
         "discord",
         "webex",
         "wakatime",

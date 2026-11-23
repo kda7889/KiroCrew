@@ -53,6 +53,7 @@ from kiro_crew.config.loader import (
 from kiro_crew.discord.gateway import maybe_start_discord
 from kiro_crew.feishu.gateway import maybe_start_feishu
 from kiro_crew.imessage.gateway import maybe_start_imessage
+from kiro_crew.max.gateway import maybe_start_max
 from kiro_crew.messaging.registry import ChannelDescriptor
 from kiro_crew.teams.gateway import maybe_start_teams
 from kiro_crew.telegram.gateway import maybe_start_telegram
@@ -66,6 +67,10 @@ from kiro_crew.whatsapp.gateway import maybe_start_whatsapp
 def builtin_channel_descriptors() -> tuple[ChannelDescriptor, ...]:
     """Every builtin channel, in governance-membership order."""
     return (
+        ChannelDescriptor(
+            channel_type="max", start=maybe_start_max,
+            credentials=("MAX_BOT_TOKEN",), boot_keys=frozenset({"enabled", "allowed_user_ids"}),
+        ),
         ChannelDescriptor(
             channel_type="slack",
             start=None,

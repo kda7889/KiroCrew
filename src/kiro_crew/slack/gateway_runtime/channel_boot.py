@@ -68,6 +68,12 @@ if TYPE_CHECKING:
 # restart re-derives exactly what boot derived. A hoist resets the legacy
 # ``_<channel>_client`` mirror too: it runs only before a start (boot or
 # restart), where the mirror is None by construction.
+def _hoist_max(self: GatewayOrchestrator, cfg: KiroCrewConfig, creds: Mapping[str, str]) -> None:
+    self._max_token = creds.get("MAX_BOT_TOKEN", "")
+    self._max_enabled = bool(cfg.max.enabled and self._max_token)
+    self._max_client = None
+
+
 def _hoist_wecom(self: GatewayOrchestrator, cfg: KiroCrewConfig, creds: Mapping[str, str]) -> None:
     self._wecom_bot_id = creds.get(CRED_WECOM_BOT_ID, "")
     self._wecom_secret = creds.get(CRED_WECOM_SECRET, "")

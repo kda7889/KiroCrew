@@ -40,6 +40,9 @@ from kiro_crew.platform import current_context, safe_context_call
 
 
 def register(app: web.Application) -> None:
+    from kiro_crew.dashboard.handlers.max_pairing import api_max_pairing
+
+    app.router.add_post("/api/max/pairing", api_max_pairing)
     """Register the connections routes on *app*."""
     # SSO login WS: an edition may supply the real login handler (CPP
     # DashboardContributor.sso_login_handler); the public Default returns None so the
