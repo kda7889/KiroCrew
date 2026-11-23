@@ -40,10 +40,15 @@ from kiro_crew.platform import current_context, safe_context_call
 
 
 def register(app: web.Application) -> None:
-    from kiro_crew.dashboard.handlers.max_pairing import api_max_pairing
-
-    app.router.add_post("/api/max/pairing", api_max_pairing)
     """Register the connections routes on *app*."""
+    from kiro_crew.dashboard.handlers.max_pairing import api_max_config, api_max_pairing, api_max_subscribe
+    from kiro_crew.max.webhook import api_max_webhook
+    from kiro_crew.dashboard.token_auth_paths import MAX_WEBHOOK_PATH
+
+    app.router.add_post(MAX_WEBHOOK_PATH, api_max_webhook)
+    app.router.add_post("/api/max/pairing", api_max_pairing)
+    app.router.add_get("/api/max/config", api_max_config)
+    app.router.add_post("/api/max/subscription", api_max_subscribe)
     # SSO login WS: an edition may supply the real login handler (CPP
     # DashboardContributor.sso_login_handler); the public Default returns None so the
     # built-in stub stays bound. Fail-closed via the canonical safe_context_call.

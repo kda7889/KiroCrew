@@ -19950,6 +19950,13 @@
       "uptime": "Tempo ativo"
     },
     "settings": {
+      "maxPanel": {
+        "guide": "Adicione o token do bot em Configurações → Segredos e ative o MAX.",
+        "pair": "Vincular proprietário",
+        "paired": "Proprietário vinculado: {{id}}",
+        "inactive": "O MAX não está ativo. Verifique as configurações e os segredos.",
+        "code_hint": "Este código expira em cinco minutos. Envie este comando ao bot em uma conversa privada."
+      },
       "mobileLoginCard": {
         "sign_in_on_mobile": "Entrar no celular",
         "create_a_one_time_link_for_mobile_or_another_browser": "Crie um link de login de curta duração para celular ou outro navegador. Ele expira em 5 minutos.",

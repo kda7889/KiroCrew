@@ -70,7 +70,8 @@ if TYPE_CHECKING:
 # restart), where the mirror is None by construction.
 def _hoist_max(self: GatewayOrchestrator, cfg: KiroCrewConfig, creds: Mapping[str, str]) -> None:
     self._max_token = creds.get("MAX_BOT_TOKEN", "")
-    self._max_enabled = bool(cfg.max.enabled and self._max_token)
+    self._max_webhook_secret = creds.get("MAX_WEBHOOK_SECRET", "")
+    self._max_enabled = bool(cfg.max.enabled and self._max_token and cfg.max.delivery_mode in ("polling", "webhook"))
     self._max_client = None
 
 

@@ -56,6 +56,9 @@ class RouteAccess:
 # Who may call a route is decided by its handler; the comment beside an entry only
 # records it.
 ROUTES: Final[dict[tuple[str, str], RouteAccess]] = {
+    ("POST", "/api/max/subscription"): RouteAccess("max.subscription.register", UNSTABLE),
+    ("GET", "/api/max/config"): RouteAccess("max.config.read", UNSTABLE),
+    ("POST", "/api/messaging/max"): RouteAccess("max.webhook.receive", UNSTABLE),
     ("POST", "/api/max/pairing"): RouteAccess("max.pairing.issue", UNSTABLE),
     # App token, owner dashboard or internal caller may read (apps/browser_sites_routes.py).
     ("GET", "/api/apps/{name}/browser-sites"): RouteAccess("apps.browser_sites.read", UNSTABLE),

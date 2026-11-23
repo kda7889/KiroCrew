@@ -9164,6 +9164,13 @@
       "filter_label": "Session filter"
     },
     "settings": {
+      "maxPanel": {
+        "guide": "Add the bot token in Settings → Secrets, then enable MAX.",
+        "pair": "Pair owner",
+        "paired": "Owner paired: {{id}}",
+        "inactive": "MAX is not running. Check its settings and secrets.",
+        "code_hint": "This code expires in five minutes. Send this command to the bot in a private chat."
+      },
       "mobileLoginCard": {
         "sign_in_on_mobile": "Sign in on mobile",
         "create_a_one_time_link_for_mobile_or_another_browser": "Create a short-lived sign-in link for mobile or another browser. It expires in 5 minutes.",

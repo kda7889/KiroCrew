@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import re
 
 from kiro_crew.config.loader import KiroCrewConfig
 from kiro_crew.config.loader_document import update_config_locked
@@ -15,6 +16,12 @@ from kiro_crew.max.transport import MaxTransport
 
 async def maybe_start_max(orch):
     if not getattr(orch, "_max_enabled", False):
+        return None
+    mode = orch._cfg.max.delivery_mode
+    secret = getattr(orch, "_max_webhook_secret", "")
+    if mode not in ("polling", "webhook"):
+        return None
+    if mode == "webhook" and not re.fullmatch(r"[A-Za-z0-9_-]{32,256}", secret):
         return None
 
     def save(uid):
@@ -62,7 +69,22 @@ async def maybe_start_max(orch):
     dispatcher.transport = transport
     client.receive = transport.receive
     client.dispatcher = dispatcher
+    if mode == "webhook":
+        from kiro_crew.max.webhook import MaxWebhook
+
+        transport.webhook = MaxWebhook(
+            transport, dispatcher, secret, data_home() / "max" / "inbox.sqlite"
+        )
     if orch.dashboard_state is not None:
         orch.dashboard_state.register_channel_transport(transport)
-    client._task = asyncio.create_task(client.poll())
+
+        def unregister():
+            transports = getattr(orch.dashboard_state, "channel_transports", {})
+            if transports.get("max") is transport:
+                transports.pop("max")
+
+        client.on_close = unregister
+    client._task = asyncio.create_task(
+        transport.webhook.run() if mode == "webhook" else client.poll()
+    )
     return client

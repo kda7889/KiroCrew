@@ -15,6 +15,7 @@ class MaxClient:
         self.receive = receive
         self._http = None
         self._task = None
+        self.on_close = None
         self._state = {"marker": None, "seen": []}
         if self.cursor.exists():
             self._state = json.loads(self.cursor.read_text(encoding="utf-8"))
@@ -106,3 +107,5 @@ class MaxClient:
             await self._http.close()
         if getattr(self, "dispatcher", None):
             await self.dispatcher.close()
+        if self.on_close:
+            self.on_close()

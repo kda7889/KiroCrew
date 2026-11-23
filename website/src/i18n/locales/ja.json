@@ -18904,6 +18904,13 @@
       "uptime": "稼働時間"
     },
     "settings": {
+      "maxPanel": {
+        "guide": "設定 → シークレットでボットのトークンを追加し、MAX を有効にしてください。",
+        "pair": "所有者を連携",
+        "paired": "所有者を連携済み: {{id}}",
+        "inactive": "MAX は起動していません。設定とシークレットを確認してください。",
+        "code_hint": "このコードは5分で期限切れになります。このコマンドをボットとのプライベートチャットで送信してください。"
+      },
       "mobileLoginCard": {
         "sign_in_on_mobile": "モバイルでサインイン",
         "create_a_one_time_link_for_mobile_or_another_browser": "モバイルまたは別のブラウザー用に、有効期限の短いサインインリンクを作成します。5分で有効期限が切れます。",

@@ -80,9 +80,9 @@ class MaxTransport(MessagingTransport):
             raise PermissionError("MAX groups and threads are disabled")
         from kiro_crew.messaging.renderer import chunk_for_transport
 
-        token = getattr(self.client, "_token", "")
-        if token:
-            content = content.replace(token, "[REDACTED: credential]")
+        for token in (getattr(self.client, "_token", ""), getattr(getattr(self, "webhook", None), "secret", "")):
+            if token:
+                content = content.replace(token, "[REDACTED: credential]")
         mid = ""
         for chunk in chunk_for_transport(content, self.capabilities):
             mid = await self.client.send(int(conversation_id), chunk)
@@ -131,6 +131,9 @@ class MaxTransport(MessagingTransport):
             await self._start(uid, text.partition(" ")[2].strip())
             return
         if self.access.allowed(uid) and self._dispatch:
+            if not text:
+                await self.send_message(str(uid), "MAX accepts text messages only.")
+                return
             await self._dispatch(
                 InboundMessage(
                     channel_type="max",

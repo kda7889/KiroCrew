@@ -8,6 +8,12 @@ string. Its token is the vault-capable `MAX_BOT_TOKEN` gateway credential,
 never a config field. Pairing uses the locked config read-modify-write primitive.
 See [the messaging runbook](messaging.md#max-development-channel).
 
+`max.delivery_mode` selects `polling` (development default) or `webhook`.
+Invalid values never start a channel. Webhook mode requires the separate
+vault-backed `MAX_WEBHOOK_SECRET`; changing the mode or that credential restarts
+only this channel. Webhook subscription registration is explicit, never a boot
+side effect. Both MAX credentials are withheld from agent subprocesses.
+
 The config package loads runtime configuration from `~/.kiro/crew/config.json`
 using stdlib dataclasses with sensible defaults. `config/sections.py` and
 `config/loader.py` are the two facades callers import. Each composes the owner

@@ -2,17 +2,62 @@
 
 ## Overview
 
-### MAX development channel
+<a id="max-development-channel"></a>
 
-The `max` channel is an owner-only, text-only development adapter. It uses
+### MAX channel
+
+MAX has two explicit modes in `max.delivery_mode`: `polling` (the retained
+development default) and `webhook`. No mode opens a listener, changes bindings,
+or creates an external subscription at boot. Production uses webhook mode with
+the vault-backed `MAX_WEBHOOK_SECRET` (32–256 ASCII letters, digits, `_`, `-`).
+The bot API credential stays `MAX_BOT_TOKEN`. Both are withheld from agents.
+
+`POST /api/messaging/max` authenticates `X-Max-Bot-Api-Secret` before reading
+the body. Its token and CSRF exceptions are exact and POST-only; every other
+method, pairing, config and subscription management retain dashboard auth.
+The body is JSON and capped at 64 KiB even without Content-Length. Wrong or
+missing secrets refuse; missing transport returns 503. Receiver shutdown removes
+the registered transport, preventing acknowledgement by a stopped inbox.
+
+Webhook messages from the admitted owner are screened and durably admitted to
+`<data home>/max/inbox.sqlite` before HTTP 200. The file is created mode 0600;
+the inbox admits at most 256 pending entries and retains 4096 done fingerprints.
+Message/callback IDs identify retries. The queue worker waits for the shared
+turn task; approvals and Stop are handled separately so they can answer a waiting
+tool. Controls retain fingerprints only: pairing codes, callback payloads and
+generated dashboard links are never queued. On restart, pending turns can start;
+an entry marked running produces an interruption notice rather than replaying
+tools. The effect/checkpoint crash gap still prevents an exactly-once claim.
+
+The host owner's **Settings → Channels → MAX → Pair owner** button issues the
+existing single-use code. The panel shows `/start <code>`, its five-minute limit,
+and pairing confirmation. Codes remain in component memory only, disappear at
+expiry or pairing, and are not stored in localStorage. GET `/api/max/config`
+returns owner ID as a string and local readiness without secrets. Readiness does
+not assert a live MAX connection; the generic `connected` flag remains false.
+
+For production setup after review: save a separate `MAX_WEBHOOK_SECRET` through
+Secrets, set `max.delivery_mode=webhook`, and arrange the chosen external HTTPS
+origin on port 443 with a trusted certificate. Configure `dashboard.url` to this
+origin. An explicit host-owner same-origin POST `/api/max/subscription` then calls
+MAX `POST /subscriptions` using the existing bot credential and the secret.
+It accepts no URL or token from the request body and refuses a missing/non-HTTPS,
+private-literal or non-443 origin before making a vendor request. This setup
+action is not run by the source patch or its mock tests. Rotating the webhook
+secret requires explicitly registering the subscription again. See the official
+[subscription contract](https://dev.max.ru/docs-api/methods/POST/subscriptions).
+
+The polling-specific notes below describe the development mode.
+
+The `max` channel is an owner-only, text-only adapter. It uses
 `https://platform-api2.max.ru`, TLS verification, and the Authorization header.
 Its factory is registered in `channels.py`; `max.enabled` defaults to false.
 `MAX_BOT_TOKEN` is a gateway credential, supports a vault `secret://` reference,
 and is withheld from agent subprocesses. No MAX token belongs in `config.json`.
 
 MAX explicitly limits GET /updates long polling to development and testing;
-production requires Webhook. This adapter implements polling only. It does not
-register a webhook, change a listener, open a port, install certificates, or
+production requires Webhook. Subscription registration requires the explicit
+owner action above. Boot does not change a listener, open a port, install certificates, or
 change the configured external dashboard origin. See the official
 [updates contract](https://dev.max.ru/docs-api/methods/GET/updates) and
 [API schema](https://github.com/max-messenger/api-schema).
@@ -45,7 +90,7 @@ cancelling the adapter task. `/new` reserves its generation durably. The namespa
 is per channel and peer; it never folds MAX into a cross-channel unified bucket.
 `/sessions` shows recent MAX sessions; `/agent [name]` selects the shared agent
 bucket. Arbitrary dashboard-session adoption, group chats, uploads, buttons,
-streaming edits and a channel-specific status card are not implemented.
+streaming edits and remote connection verification are not implemented.
 
 `/web` and `/mobile` mint the existing dashboard login token with a 300-second
 session TTL. They require a configured external HTTPS `dashboard.url`; loopback
@@ -84,12 +129,9 @@ gateways or combine polling with a MAX webhook subscription.
 4. In Settings' configuration editor, set `max.enabled=true` and leave
    `max.allowed_user_ids=[]`. Keep MAX fields in the base configuration, not
    `config.local.json`, for pairing. The channel still denies unknown senders.
-5. From the signed-in host owner's dashboard browser, run the following
-   same-origin request in the browser console. Keep the returned code private:
-
-   ```javascript
-   await fetch('/api/max/pairing', {method: 'POST'}).then(r => r.json())
-   ```
+5. In the signed-in host owner's dashboard open **Settings → Channels → MAX**
+   and press **Pair owner**. Keep the displayed code private. An inactive channel
+   disables the button and shows a setup hint. No browser console is required.
 
 6. Within five minutes, send `/start <code>` to `@id2311384963_bot` from the
    owner's MAX account in a private dialog. A bare `/start` grants nothing.
@@ -106,8 +148,9 @@ gateways or combine polling with a MAX webhook subscription.
    explicitly remove the old numeric owner in Settings and issue a fresh code.
    No automatic account takeover occurs.
 
-Never describe this polling adapter as production-ready. A reviewed webhook
-implementation and an owner-chosen external HTTPS deployment remain separate.
+Polling remains development-only. The webhook source and its mock tests do not
+prove a live production deployment: external HTTPS setup, reviewed installation,
+subscription registration and live smoke testing remain explicit operator steps.
 
 `kiro_crew.messaging` is the channel-neutral transport abstraction used by the shipped Slack, Discord, Telegram, Webex, WeCom, Microsoft Teams, Weixin, iMessage, WhatsApp, and Feishu integrations; its conservative contract also leaves room for a further channel. It avoids re-implementing streaming, tool approval, session identity, or rendering for each integration. It holds the channel-neutral core of the Slack turn loop (`slack/handler.py::handle_message`) so a new channel implements only two small interfaces (a `MessagingTransport` + a `Renderer`) and inherits everything else.
 

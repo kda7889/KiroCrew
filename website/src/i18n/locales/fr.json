@@ -19950,6 +19950,13 @@
       "uptime": "Durée"
     },
     "settings": {
+      "maxPanel": {
+        "guide": "Ajoutez le jeton du bot dans Paramètres → Secrets, puis activez MAX.",
+        "pair": "Associer le propriétaire",
+        "paired": "Propriétaire associé : {{id}}",
+        "inactive": "MAX ne fonctionne pas. Vérifiez ses paramètres et ses secrets.",
+        "code_hint": "Ce code expire dans cinq minutes. Envoyez cette commande au bot dans une conversation privée."
+      },
       "mobileLoginCard": {
         "sign_in_on_mobile": "Se connecter sur mobile",
         "create_a_one_time_link_for_mobile_or_another_browser": "Créez un lien de connexion de courte durée pour un mobile ou un autre navigateur. Il expire dans 5 minutes.",

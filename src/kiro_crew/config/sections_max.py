@@ -8,7 +8,14 @@ from kiro_crew.config.fields import _meta
 @dataclass
 class MaxConfig:
     enabled: bool = field(
-        default=False, metadata=_meta("Enabled", "Enable MAX development polling.")
+        default=False, metadata=_meta("Enabled", "Enable the owner-only MAX channel.")
+    )
+    delivery_mode: str = field(
+        default="polling",
+        metadata=_meta(
+            "Delivery mode",
+            "polling for development; webhook for production. Subscription is configured separately.",
+        ),
     )
     allowed_user_ids: list[int] = field(
         default_factory=list,

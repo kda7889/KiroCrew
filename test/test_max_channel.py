@@ -350,8 +350,10 @@ async def test_outbound_removes_exact_bot_token():
     wire = Wire()
     wire._token = "synthetic-sensitive-bot-token"
     transport = MaxTransport(wire, OwnerAccess([42], lambda uid: None), None, None)
-    await transport.send_message("42", "echo " + wire._token)
+    transport.webhook = SimpleNamespace(secret="synthetic-sensitive-webhook-secret")
+    await transport.send_message("42", "echo " + wire._token + transport.webhook.secret)
     assert wire._token not in wire.sent[-1][1]
+    assert transport.webhook.secret not in wire.sent[-1][1]
 
 
 def test_max_config_loads_owner_without_coercing_strings(tmp_path, monkeypatch):

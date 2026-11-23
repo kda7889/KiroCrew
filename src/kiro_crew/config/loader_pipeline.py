@@ -1275,6 +1275,7 @@ def build_config(
         memory=_build_memory_config(memory_data),
         knowledge=_build_knowledge_config(knowledge_data),
         max=MaxConfig(
+            delivery_mode=_sections.SectionReader(MaxConfig, _coerced_section(data, "max", _degraded)).get("delivery_mode"),
             enabled=_sections.SectionReader(MaxConfig, _coerced_section(data, "max", _degraded)).read("enabled", _safe_bool),
             allowed_user_ids=_sections.SectionReader(MaxConfig, _coerced_section(data, "max", _degraded)).get("allowed_user_ids"),
         ),

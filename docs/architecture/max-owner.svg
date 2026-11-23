@@ -4,7 +4,7 @@
 <rect x="20.0" y="25.0" width="1230.0" height="130.0" fill="#f8fafc"/><text x="28.0" y="41.0" stroke="none">Host owner</text>
 <rect x="20.0" y="155.0" width="1230.0" height="265.0" fill="#f8fafc"/><text x="28.0" y="171.0" stroke="none">Gateway</text>
 <circle cx="73.0" cy="93.0" r="18.0" fill="white" stroke-width="1"/><text x="73.0" y="128.0" text-anchor="middle" stroke="none">Pair request</text>
-<rect x="130.0" y="55.0" width="165.0" height="76.0" rx="8" fill="white"/><text x="212.5" y="98.0" text-anchor="middle" stroke="none">Owner: dashboard POST</text>
+<rect x="130.0" y="55.0" width="165.0" height="76.0" rx="8" fill="white"/><text x="212.5" y="98.0" text-anchor="middle" stroke="none">Owner: pair button</text>
 <polygon points="360.0,210.0 385.0,235.0 360.0,260.0 335.0,235.0" fill="white"/><text x="360.0" y="201.0" text-anchor="middle" stroke="none">Host owner?</text><text x="360.0" y="240.0" text-anchor="middle" stroke="none">×</text>
 <rect x="430.0" y="197.0" width="165.0" height="76.0" rx="8" fill="white"/><text x="512.5" y="240.0" text-anchor="middle" stroke="none">Gateway: issue code</text>
 <rect x="635.0" y="55.0" width="165.0" height="76.0" rx="8" fill="white"/><text x="717.5" y="98.0" text-anchor="middle" stroke="none">Owner: private /start</text>

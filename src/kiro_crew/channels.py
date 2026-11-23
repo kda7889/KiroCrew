@@ -69,7 +69,8 @@ def builtin_channel_descriptors() -> tuple[ChannelDescriptor, ...]:
     return (
         ChannelDescriptor(
             channel_type="max", start=maybe_start_max,
-            credentials=("MAX_BOT_TOKEN",), boot_keys=frozenset({"enabled", "allowed_user_ids"}),
+            credentials=("MAX_BOT_TOKEN",), restart_credentials=("MAX_WEBHOOK_SECRET",),
+            boot_keys=frozenset({"enabled", "allowed_user_ids", "delivery_mode"}),
         ),
         ChannelDescriptor(
             channel_type="slack",

@@ -19427,6 +19427,13 @@
       "uptime": "Laufzeit"
     },
     "settings": {
+      "maxPanel": {
+        "guide": "Fügen Sie das Bot-Token unter Einstellungen → Geheimnisse hinzu und aktivieren Sie MAX.",
+        "pair": "Eigentümer verknüpfen",
+        "paired": "Eigentümer verknüpft: {{id}}",
+        "inactive": "MAX läuft nicht. Prüfen Sie die Einstellungen und Geheimnisse.",
+        "code_hint": "Dieser Code läuft nach fünf Minuten ab. Senden Sie diesen Befehl dem Bot in einem privaten Chat."
+      },
       "mobileLoginCard": {
         "sign_in_on_mobile": "Auf dem Mobilgerät anmelden",
         "create_a_one_time_link_for_mobile_or_another_browser": "Erstellen Sie einen kurzlebigen Anmeldelink für ein Mobilgerät oder einen anderen Browser. Er läuft nach 5 Minuten ab.",

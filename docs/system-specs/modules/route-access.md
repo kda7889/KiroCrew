@@ -7,6 +7,14 @@ the signed-in host owner and a matching browser Origin. It refuses app tokens
 and teammates, returns `no-store`, and never returns a bot token. The code's
 TTL and retry contract is in [messaging](messaging.md#max-development-channel).
 
+`GET /api/max/config` (`max.config.read`) and `POST /api/max/subscription`
+(`max.subscription.register`) also require the host owner and refuse app tokens
+and teammates. Subscription registration requires a same-origin POST and uses
+only the operator-configured HTTPS origin and server-held secrets.
+`POST /api/messaging/max` (`max.webhook.receive`) self-authenticates using the MAX
+secret header. Only that exact path and method are exempt from dashboard-token
+and CSRF checks; the handler rejects a missing/wrong secret before reading JSON.
+
 An HTTP route the gateway registers can carry a label: what it does (an **action
 name**, such as `widgets.reset`) and how long its request and response shape is
 promised (a **tier**). This spec says where a label is recorded and how to pick its

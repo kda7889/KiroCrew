@@ -7,7 +7,7 @@
       <bpmn:lane id="GatewayLane" name="Gateway"><bpmn:flowNodeRef>Host</bpmn:flowNodeRef><bpmn:flowNodeRef>Issue</bpmn:flowNodeRef><bpmn:flowNodeRef>Valid</bpmn:flowNodeRef><bpmn:flowNodeRef>Persist</bpmn:flowNodeRef><bpmn:flowNodeRef>Paired</bpmn:flowNodeRef><bpmn:flowNodeRef>Denied</bpmn:flowNodeRef></bpmn:lane>
     </bpmn:laneSet>
     <bpmn:startEvent id="Start" name="Pair request"/>
-    <bpmn:userTask id="Request" name="Owner: dashboard POST"/>
+    <bpmn:userTask id="Request" name="Owner: pair button"/>
     <bpmn:exclusiveGateway id="Host" name="Host owner?"/>
     <bpmn:serviceTask id="Issue" name="Gateway: issue code"/>
     <bpmn:userTask id="Present" name="Owner: private /start"/>
