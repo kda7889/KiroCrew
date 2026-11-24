@@ -6,10 +6,11 @@ Source checkpoint: `6573ca6b0ca3bdd06e2dc54c112dd3d1e489a156`, branch
 `/home/adminuser/.kiro/crew/workspace-member-codex-dev/kirocrew-max-source`.
 
 **Follow-up result:** source npm dependencies restored; five MAX component tests
-and three selected transport tests passed on testserver. A later Python run passed
-55 MAX tests with the explicitly mixed fallback; the clean source environment
-remains incomplete after a download timeout. Browser/OS/live evidence is still
-missing. Native read-only process diagnostics returned an owner-scope
+and three selected transport tests passed on testserver. The final wheelhouse
+follow-up installed93 packages in the isolated source environment, passed a real
+dependency check and55 MAX tests **without the installed-package fallback**.
+Cryptography47.0.0 satisfies the source constraint. Browser/OS/live evidence is
+still missing. Native read-only process diagnostics returned an owner-scope
 denial. Details below; initial inspection facts remain historical snapshots.
 
 ## Initial migration inspection
@@ -241,7 +242,7 @@ credentials through chat, loosen the member scope, clear a sandbox marker or use
 the file-transfer key as a shell credential. A repair remains a separate decision
 after real ownership evidence; the old hardcoded repair is still inapplicable.
 
-## Isolated Python follow-up
+## Earlier isolated Python attempt (superseded below)
 
 The next decision superseded the stale cache-fetch instruction: npm restoration
 and its checks were already finished and were not repeated. Source HEAD at entry
@@ -266,7 +267,7 @@ only this new environment. Normal certificate validation remained enabled.
 The network install exhausted its normal three retries for the httpx wheel.
 The entire network installation was not restarted, and no chain of individual
 tarball downloads followed. The offline cryptography-only check also failed.
-The new environment consequently contains zero installed distributions:
+At that checkpoint the new environment contained zero installed distributions:
 `uv pip check` returned0 while explicitly reporting **Checked 0 packages**.
 That vacuous result is **not** a completed dependency gate or a usable source env.
 
@@ -284,9 +285,9 @@ prove their own mocked assertions, **not** source dependency compatibility. The
 six pytest/aiohttp warnings were retained. No OS namespace test, browser, external
 MAX subscription or candidate backend was started.
 
-Next: complete the isolated source environment from available trusted wheel
-artifacts or restored normal package access, verify every applicable requirement
-and a nonempty dependency check, then rerun the narrow MAX files in that environment
+The next step at that checkpoint was to complete the isolated source environment
+from trusted wheel artifacts or restored normal package access, verify every
+applicable requirement and a nonempty dependency check, then rerun the MAX files
 without the fallback. Do not silently relax the cryptography constraint or replace
 installed gateway dependencies. No credentials or auth copies are needed.
 
@@ -302,3 +303,68 @@ The Git-sync snapshot read during this follow-up was checked at
 `2026-11-24T20:16:58.893242+00:00`, `needs_attention=0`; this MAX checkout was absent
 from its repository list. This is not proof of remote preservation. No push was
 performed under the explicit live-before-upstream restriction.
+
+## Wheelhouse follow-up: Python source checks passed
+
+This replaces the incomplete-environment result above, not its historical facts.
+The approved next step was one bounded wheelhouse download, one offline install,
+a real dependency check and the two MAX test files. No npm or full build ran.
+
+The existing cached resolution was compiled offline:93 exact versions, including
+cryptography47.0.0, satisfying32 applicable core and15 dev constraints unchanged
+from `setup.cfg`. SHA256 hashes came from the cached PyPI distribution metadata.
+The original all-platform hashed snapshot SHA256 was
+`8b35eb73c886486574683ce37378a493bfad101e7658d72dc5dc0c34f4cba0cb`.
+
+One `pip download` used the explicit official `https://pypi.org/simple` index,
+normal TLS, `--require-hashes --only-binary :all: --no-deps --timeout 120 --retries 0`.
+Inherited `PIP_*` overrides were removed from that child and `PIP_CONFIG_FILE`
+was set to the platform null file. No registry mirror, trusted-host exception,
+source build or changed version was used. All93 wheels completed; no missing
+artifact remained. The available RAM was17.8GB, then18.0GB before installation
+and18.1GB before tests, AMPLE each time; all steps were sequential.
+
+| Check | Exit | Maximum RSS KiB | Wall | Result |
+|---|---:|---:|---:|---|
+| Wheelhouse download |0|248744|1003.94s|93 wheels, hashes verified|
+| Single offline install |0|101348|17.74s|93 distributions installed|
+| Real target-env pip check |0|36880|0.76s|No broken requirements found|
+| Source MAX test files |0|202512|13.77s|55 passed,6 warnings; pytest11.08s|
+
+All measured runs reported zero swaps. The target is the separate
+`max-source-test-env` beside the checkout, `include-system-site-packages=false`.
+Every installed distribution and every applicable core/dev requirement was checked
+against that environment's own path and the source version ranges. There were93
+distributions, not an empty-environment check. Cryptography imports47.0.0 and
+aiohttp imports from that taskenv. MAX access/webhook imports resolve to this
+checkout's `src`, with no installed gateway or inherited `max-test-env` site-packages
+on the test path. The six existing pytest/aiohttp warnings were retained.
+
+The exact selected Linux x86_64 / CPython3.12 wheel hashes are retained in
+[max-python-testserver-requirements.txt](max-python-testserver-requirements.txt).
+This is a reproduction snapshot, not a replacement for the project's constraints
+or a portable lock for other platforms. Each retained hash was independently
+matched against the downloaded wheel and original hashed resolution.
+Wheel binaries remain in the session scratch `max-source-wheelhouse`; scratch
+may be reclaimed. Re-create that wheelhouse from the retained snapshot when needed.
+
+Commands from the checkout root for the same target environment and wheelhouse:
+
+```bash
+../max-test-env/bin/python -m pip --python ../max-source-test-env/bin/python install --no-index --find-links "$KIROCREW_SCRATCH/max-source-wheelhouse" --require-hashes --only-binary :all: -r docs/guides/max-python-testserver-requirements.txt
+../max-test-env/bin/python -m pip --python ../max-source-test-env/bin/python check
+/usr/bin/time -v env PYTHONPATH=src ../max-source-test-env/bin/python -m pytest -n0 test/test_max_channel.py test/test_max_webhook.py --basetemp "$KIROCREW_SCRATCH/max-python-isolated"
+```
+
+The executed offline install used the original all-platform hashed snapshot;
+the retained snapshot selects the same93 versions and the verified local wheel
+hash for each. No second install was run just to exercise this reproduction recipe.
+The existing interpreter's pip only bootstrapped the target-env pip command;
+it supplied no runtime dependencies to these tests.
+
+This closes the Python dependency mismatch and narrow source-test step only.
+The next owner/host action remains the prepared read-only profile metadata block
+above; the parent will pass it to the owner. No debug retry, profile read bypass,
+lock cleanup, installed gateway change, auth mint, subscription, live test or
+upstream push occurred. Browser and real OS-fence evidence still precede any
+candidate/live decision. Overall MAX readiness remains open.
