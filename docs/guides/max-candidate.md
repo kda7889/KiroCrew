@@ -94,12 +94,20 @@ or new HTTPS ingress is needed for the polling trial. The agent did not mint or
 exchange a dashboard token through an API or copy an existing login.
 
 For the shortest **development/test live trial**, use a dedicated bot with no
-active webhook or other receiver. In authenticated **Settings → Secrets**, save
-its fresh replacement token as Custom Secret `max-bot`. The CLI currently supports
+active webhook or other receiver. The owner confirmed the existing Custom Secret
+`bot_max_kda` in **Settings → Secrets**. Use that exact name, without renaming it.
+The launcher maps `MAX_BOT_TOKEN=secret://bot_max_kda`; underscores are accepted
+by the standard secret-name validator. The CLI currently supports
 secret import/authorization, not secret set; do not use a made-up CLI or DevTools.
-The exposed chat token must be revoked and never reused. MAX is initially disabled
-with an empty owner allowlist. After saving the new Secret, stop only this foreground
-candidate with Ctrl-C, then use its normal configuration command and restart:
+Confirm that the Secret was saved in this candidate on55476, not the working
+gateway. No available change-card tool can select a different instance, and the
+agent must not inspect or copy either vault to establish this.
+
+MAX is initially disabled with an empty owner allowlist. The already running
+process still has the former shell reference; updating the launcher cannot
+replace a running process's environment. One candidate restart is needed for
+this reference change. Stop only the foreground candidate with Ctrl-C, then use
+its normal configuration command and restart (adminuser's ordinary terminal):
 
 ```bash
 sh scripts/max_trial.sh config set max.delivery_mode polling
@@ -269,13 +277,12 @@ The loopback candidate must not share a bot token with another active receiver.
 
 ## Secrets and production transport
 
-1. The owner revokes the bot token exposed in chat. Enter its replacement only
-   through the candidate's authenticated **Settings → Secrets**. Do not send it
-   through chat, shell arguments, command output or a document.
-2. Save a Secret named `max-bot` and a separate random webhook Secret named
+1. Use the owner's existing Secret `bot_max_kda` in the candidate's authenticated
+   **Settings → Secrets**; never read or copy its value into the launcher.
+2. Keep the Secret named `bot_max_kda` and a separate random webhook Secret named
    `max-webhook`. The webhook value must contain 32–256 ASCII letters, digits,
    underscores or hyphens. The operator-managed environment maps
-   `MAX_BOT_TOKEN=secret://max-bot` and
+   `MAX_BOT_TOKEN=secret://bot_max_kda` and
    `MAX_WEBHOOK_SECRET=secret://max-webhook`. These are vault references, not
    credential values. The owner must arrange this environment before starting
    or explicitly restarting **only the candidate**.

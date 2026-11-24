@@ -39,7 +39,7 @@ def trial_env(home: Path, runtime: Path, taskenv: Path) -> dict[str, str]:
         "DBUS_SESSION_BUS_ADDRESS": f"unix:path={runtime}/bus",
         "LANG": "C.UTF-8",
         "TERM": "xterm",
-        "MAX_BOT_TOKEN": "secret://max-bot",
+        "MAX_BOT_TOKEN": "secret://bot_max_kda",
         "MAX_WEBHOOK_SECRET": "secret://max-webhook",
     }
 

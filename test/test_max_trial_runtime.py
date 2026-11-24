@@ -23,6 +23,7 @@ def test_clean_env_keeps_validated_user_bus_and_short_default_home(runtime_helpe
     assert env["HOME"] == "/home/test/.max-trial"
     assert env["XDG_RUNTIME_DIR"] == "/run/user/123"
     assert env["DBUS_SESSION_BUS_ADDRESS"] == "unix:path=/run/user/123/bus"
+    assert env["MAX_BOT_TOKEN"] == "secret://bot_max_kda"
     assert "KIROCREW_HOME" not in env
     assert "AWS_SECRET_ACCESS_KEY" not in env
     assert len((env["HOME"] + "/.kiro/crew/kirocrew-mcp-gateway.sock").encode()) < 108
