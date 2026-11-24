@@ -19,7 +19,7 @@ download or55-test rerun.
 
 Concrete private trial root:
 `/home/adminuser/.kiro/crew/workspace-member-codex-dev/_only_local/max-trial-11249e86`.
-The wheel is retained there; `os-home` is a fresh private HOME. No auth, live
+The wheel is retained there; `os-home` was the first private HOME. No auth, live
 configuration, vault, profile or provider session was copied. A bounded,
 credential-free headless boot on127.0.0.1:55476 returned health200 and unauthenticated
 pairing403; that owned process was stopped. Version/gateway-help/secrets-help
@@ -33,11 +33,51 @@ sh scripts/max_trial.sh
 ```
 
 The launcher refuses the agent sandbox marker; never clear it. It uses the fresh
-HOME/data home, loopback55476, no tunnel, no automatic browser or cron scheduler,
+short HOME `/home/adminuser/.max-trial-11249e86`, default data home
+`/home/adminuser/.max-trial-11249e86/.kiro/crew`, loopback55476, no tunnel,
+no automatic browser or cron scheduler,
 and interactive approvals. It clears inherited environment credentials before
 running the candidate. It supplies only vault references for MAX, never a token
 value. Keep this foreground process in the owner terminal; it is not a service.
 If55476 is occupied, stop for review rather than stopping the other listener.
+
+### Restart after the owner's first boot
+
+The owner's first boot reached health200 but exposed two launcher faults: its
+deep HOME overflowed Linux's107-byte UNIX-socket path limit; clearing the whole
+environment also removed `XDG_RUNTIME_DIR`. The corrected launcher starts in the
+new short private HOME above. The former `os-home` is left untouched; no vault,
+login, profile or KAS cache is moved or copied. Its former login link belongs to
+the old instance and must not be reused. A normal first-start KAS download may
+therefore occur again; it is not evidence of a running model turn.
+
+Stop **only the owner's foreground trial** with Ctrl-C, then restart from the
+owner's terminal (the command also works when that terminal is root):
+
+```bash
+sudo -u adminuser -H sh /home/adminuser/.kiro/crew/workspace-member-codex-dev/kirocrew-max-source/scripts/max_trial.sh
+```
+
+The preflight pins testserver/UID1002, rejects symlink/private-directory drift,
+and checks the real `/run/user/1002` mode0700/owner and its same-owner bus socket.
+It passes only that verified runtime and `unix:path=/run/user/1002/bus` into the
+clean environment, requires delegated memory/pids controllers, and checks that
+the user manager's default target is active. It neither creates a user session
+nor changes a service, controller or policy. Failure stops before the product
+CLI/engine. A real login session is needed if those checks fail; no substitute
+runtime directory or disabled cgroup check is allowed.
+
+On the inspected host the runtime owner/mode matched UID1002/0700, bus was a
+same-owner socket, default.target was active and controllers included cpu,
+memory and pids. Those are read-only prerequisites, **not measured cgroup scope
+enforcement**. Before a model/tool turn, require the restarted candidate's
+resource guard to report available; if unavailable, stop and report the reason.
+OS-fence proof remains open. MAX remains disabled by default in the new HOME.
+
+`KIROCREW_HOME` is no longer injected: the short HOME's standard `.kiro/crew`
+already gives isolation. The source's reserved spec-env sanitizer remains
+unchanged; no reserved namespace or caller identity is admitted to silence its
+warning. The short default dashboard and MCP socket paths fit the UNIX limit.
 
 In a second terminal, the supported owner sign-in command is:
 
