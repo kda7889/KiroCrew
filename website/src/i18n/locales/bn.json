@@ -11500,6 +11500,8 @@
       "primary_mcp_server": "প্রয়োগ করো",
       "primary_mcp_server_project": "{{name}}-কে এই প্রজেক্টে যোগ করো",
       "decline_mcp_server": "বাতিল করো",
+      "decline_mcp_project_server": "এখন নয়",
+      "primary_mcp_project_server": "এই ফোল্ডারে অনুমতি দিন",
       "title_mcp_server_add": "সার্ভার যোগ করো: {{name}}",
       "title_mcp_server_change": "সার্ভার বদলাও: {{name}}",
       "title_mcp_server_remove": "সার্ভার সরাও: {{name}}",

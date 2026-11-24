@@ -11508,6 +11508,8 @@
       "primary_mcp_server": "[Àþþĺý ········]",
       "primary_mcp_server_project": "[Àðð {{name}} ţø ţĥìş þŕøĵèçţ ··················]",
       "decline_mcp_server": "[Çàñçèĺ ·········]",
+      "decline_mcp_project_server": "[Ñøţ ñøẁ ···········]",
+      "primary_mcp_project_server": "[Àĺĺøẁ ìñ ţĥìş ƒøĺðèŕ ··················]",
       "title_mcp_server_add": "[Àðð şèŕṽèŕ: {{name}} ···········]",
       "title_mcp_server_change": "[Çĥàñğè şèŕṽèŕ: {{name}} ··············]",
       "title_mcp_server_remove": "[Ŕèɱøṽè şèŕṽèŕ: {{name}} ··············]",
