@@ -5,6 +5,9 @@ has a webhook receiver and owner Settings controls. The credential-free boot is
 verified below; no MAX live delivery has been proved. Do not publish upstream
 before the live checks pass.
 
+The TLS correction below is prepared as a separate wheel. The owner's currently
+running instance still uses the former wheel: no active runtime was overwritten.
+
 ## Prepared trial on testserver
 
 The owner waived browser/screenshots as a trial prerequisite and will define the
@@ -144,6 +147,86 @@ own live proof. Source/browser gates listed later retain their historical scope;
 they do not reintroduce the owner's waived screenshot prerequisite for this trial.
 
 ## Versions and gates
+
+### MAX TLS preflight on testserver,2026-11-24
+
+Both source and the former prepared wheel already use `platform-api2.max.ru`.
+The official [API overview](https://dev.max.ru/docs-api/) and
+[changelog](https://dev.max.ru/docs-api/changelog-api) require that domain and
+the Ministry CA after July19,2026. Do not fall back to the old domain just because
+its certificate verifies against the OS store.
+
+Bounded unauthenticated `GET /me`, hostname/chain verification enabled:
+
+| Endpoint | Peer IP | HTTP | TLS verification | Total seconds |
+|---|---|---|---|---|
+| platform-api.max.ru |155.212.204.149|401|0, verified|3.993|
+| platform-api2.max.ru, OS trust |155.212.204.149|000|20, unknown issuer; curl60|4.160|
+| platform-api2.max.ru, official root scoped to curl |155.212.204.149|401|0, verified|3.491|
+
+The new endpoint's issuer is Russian Trusted Sub CA. These results establish a
+missing CA trust path on testserver, **not a Russian-IP restriction**. A401
+without a credential proves transport only, not the owner's bot identity or a
+real reply. The owner names the bot `@id2311384963_bot`; its authenticated
+identity and `/help` remain unproved until the candidate uses the saved Secret.
+
+The root was downloaded with ordinary verified HTTPS from
+`https://gu-st.ru/content/Other/doc/russian_trusted_root_ca.cer`, not obtained
+from the API handshake. The distribution URL is also documented by the
+[Saratov government workstation guide](https://minforest.saratov.gov.ru/lesnoe-hozyaistvo/Инструкция%20по%20настройке%20АРМ%20пользователей%20для%20доступа%20в%20ЛКЛ%20ФГИС%20ЛК.pdf)
+and the [Sber developer certificate guide](https://developers.sber.ru/docs/ru/salutespeech/quick-start/certificates).
+Only the distribution URL is used from those guides; no insecure-download or
+global trust commands from an example are executed.
+
+Pinned root DER SHA256:
+`d26d2d0231b7c39f92cc738512ba54103519e4405d68b5bd703e9788ca8ecf31`.
+Subject and issuer: Russian Trusted Root CA, Ministry of Digital Development
+and Communications; validity March1,2022–February27,2032. The separately downloaded
+official Sub CA verified against this root; its DER SHA256 is
+`bbbde2103e790b999ec62bd03cf625a5a2e7c316e10afe6a490eedead8b3fd9b`.
+The API handshake plus `/me` succeeded with the **root alone**. Only that root
+is packaged at `src/kiro_crew/max/russian_trusted_root_ca.pem` (PEM line endings
+are normalized; pin DER, not the downloaded file's formatting).
+
+`_max_ssl_context()` extends default trust only in MAX's `aiohttp.TCPConnector`.
+It retains `CERT_REQUIRED`, hostname verification and the client's no-redirect
+contract. No system/certifi store, global SSL environment, engine or other client
+is changed. No CA download occurs at runtime. Re-verify the official distribution,
+fingerprint and validity before replacing this packaged root.
+
+The documented infra SSH path to the host behind `hub.kda7889.ru`
+(`gw`,82.202.158.39:22) returned Connection refused before any remote curl.
+No new SSH trust or route, proxy, receiver, firewall or DNS change was made.
+There is no current evidence requiring a move to hub.
+
+Prepared TLS wheel (source client and CA bytes checked against ZIP contents):
+`/home/adminuser/.kiro/crew/workspace-member-codex-dev/_only_local/max-trial-11249e86/tls-candidate/kirocrew-0.14.0-py3-none-any.whl`.
+SHA256 `dde97735a501acdf6963df3ded0a541fca5e8a01eca441526cd8e86d0eb487a7`.
+The wheel includes2599 existing frontend asset entries and the CA package data.
+Offline build exited0 (25.24s, peak RSS54568KiB). Targeted MAX/TLS tests:
+57passed,7warnings,13.75s,exit0. Default SSL contexts remain unchanged in the test.
+
+An attempt to prepare a second runtime with the pinned93 dependencies offline
+stopped on missing cached `pillow==13.0.0`; no network reinstall or dependency
+fallback followed. `max-tls-test-env` is incomplete and is **not** the launcher's
+runtime. The established source taskenv's dependencies and running wheel were
+left untouched. Do not call the running candidate TLS-fixed yet.
+
+To apply without touching the working gateway, the owner first stops **only the
+foreground trial** with Ctrl-C. The now-idle isolated runtime can then take the
+prepared wheel offline, reusing its established dependencies:
+
+```bash
+sudo -u adminuser -H /home/adminuser/.local/bin/uv pip install --offline --no-deps --reinstall-package kirocrew --python /home/adminuser/.kiro/crew/workspace-member-codex-dev/max-source-test-env/bin/python /home/adminuser/.kiro/crew/workspace-member-codex-dev/_only_local/max-trial-11249e86/tls-candidate/kirocrew-0.14.0-py3-none-any.whl
+sudo -u adminuser -H sh /home/adminuser/.kiro/crew/workspace-member-codex-dev/kirocrew-max-source/scripts/max_trial.sh
+```
+
+The agent can do the offline package update after the owner has stopped the
+trial; the owner-only launcher remains guarded. No HOME/vault/provider login is
+relocated by this update. Confirm the correct candidate Secret instance before
+enabling MAX, then pair and require an actual `/help` reply from
+`@id2311384963_bot`. An authenticated identity request is still pending; no token
+was extracted for this preflight and no second receiver was started.
 
 Source: branch `codex-dev/max-messenger`, base
 `230514b679ba349052d6f8fd1eae838bdd5ddd7d`, package **0.14.0**. The currently

@@ -3,10 +3,20 @@
 import asyncio
 import hashlib
 import json
+import ssl
 from pathlib import Path
 from typing import Any, TypedDict
 
 API_ORIGIN = "https://platform-api2.max.ru"
+
+
+def _max_ssl_context() -> ssl.SSLContext:
+    """Extend only MAX's trust with its documented CA; retain all TLS checks."""
+    context = ssl.create_default_context()
+    context.load_verify_locations(
+        cafile=str(Path(__file__).with_name("russian_trusted_root_ca.pem"))
+    )
+    return context
 
 
 class PollState(TypedDict):
@@ -50,7 +60,10 @@ class MaxClient:
         if self._http is None:
             import aiohttp
 
-            self._http = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=100))
+            self._http = aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(total=100),
+                connector=aiohttp.TCPConnector(ssl=_max_ssl_context()),
+            )
         # Never put credentials in URLs, exceptions, reprs or logs.
         try:
             async with self._http.request(

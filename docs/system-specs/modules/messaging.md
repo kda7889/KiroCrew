@@ -12,6 +12,14 @@ or creates an external subscription at boot. Production uses webhook mode with
 the vault-backed `MAX_WEBHOOK_SECRET` (32–256 ASCII letters, digits, `_`, `-`).
 The bot API credential stays `MAX_BOT_TOKEN`. Both are withheld from agents.
 
+MAX requests use `https://platform-api2.max.ru`, following the official July2026
+API migration. Only this client's connector extends standard TLS trust with the
+packaged Russian Trusted Root CA. Hostname and chain verification remain enabled;
+no system trust, global SSL environment or other HTTP client is changed. The CA's
+official source, pinned fingerprint and no-credential network evidence are in
+`docs/guides/max-candidate.md`. The CA is package data, so source and wheel carry
+the same trust material; replacing the PEM requires re-verifying its provenance.
+
 `POST /api/messaging/max` authenticates `X-Max-Bot-Api-Secret` before reading
 the body. Its token and CSRF exceptions are exact and POST-only; every other
 method, pairing, config and subscription management retain dashboard auth.
