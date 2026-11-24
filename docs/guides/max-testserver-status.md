@@ -6,8 +6,10 @@ Source checkpoint: `6573ca6b0ca3bdd06e2dc54c112dd3d1e489a156`, branch
 `/home/adminuser/.kiro/crew/workspace-member-codex-dev/kirocrew-max-source`.
 
 **Follow-up result:** source npm dependencies restored; five MAX component tests
-and three selected transport tests passed on testserver. Browser/OS/live evidence
-is still missing. Native read-only process diagnostics returned an owner-scope
+and three selected transport tests passed on testserver. A later Python run passed
+55 MAX tests with the explicitly mixed fallback; the clean source environment
+remains incomplete after a download timeout. Browser/OS/live evidence is still
+missing. Native read-only process diagnostics returned an owner-scope
 denial. Details below; initial inspection facts remain historical snapshots.
 
 ## Initial migration inspection
@@ -238,3 +240,65 @@ The earlier ordinary-host snippet is prepared for that purpose. Do not send
 credentials through chat, loosen the member scope, clear a sandbox marker or use
 the file-transfer key as a shell credential. A repair remains a separate decision
 after real ownership evidence; the old hardcoded repair is still inapplicable.
+
+## Isolated Python follow-up
+
+The next decision superseded the stale cache-fetch instruction: npm restoration
+and its checks were already finished and were not repeated. Source HEAD at entry
+was `9dda2b74b35e95cd84f500d4156adc02a0d13f99`, clean. Available RAM was17.9GB,
+then17.8GB before the sequential Python tests. No workers were spawned.
+
+A separate `max-source-test-env` was created beside the source checkout using
+the existing CPython3.12.13 interpreter. Its `include-system-site-packages=false`
+differs from the inherited `max-test-env` setting. No installed gateway environment
+was changed. Core and dev requirements were read directly from `setup.cfg`, then
+passed as separate arguments to `uv pip install --only-binary :all:` targeting
+only this new environment. Normal certificate validation remained enabled.
+
+| Check | Exit | Maximum RSS KiB | Wall | Evidence |
+|---|---:|---:|---:|---|
+| Source core/dev install |2|112172|318.38s|93 resolved; httpx0.28.1 wheel timeout|
+| Same install, offline |1|58928|0.06s|qrcode8.2 wheel missing from cache|
+| Only cryptography, offline |1|not measured|not measured|cryptography47.0.0 wheel missing|
+| Standalone inherited env pytest |4|not measured|not measured|conftest requires absent aiohttp|
+| Mixed fallback MAX tests |0|220916|21.62s|55 passed,6 warnings; pytest19.74s|
+
+The network install exhausted its normal three retries for the httpx wheel.
+The entire network installation was not restarted, and no chain of individual
+tarball downloads followed. The offline cryptography-only check also failed.
+The new environment consequently contains zero installed distributions:
+`uv pip check` returned0 while explicitly reporting **Checked 0 packages**.
+That vacuous result is **not** a completed dependency gate or a usable source env.
+
+The available test path retained the prior read-only dependency fallback:
+
+```bash
+cd /home/adminuser/.kiro/crew/workspace-member-codex-dev/kirocrew-max-source
+/usr/bin/time -v env PYTHONPATH=src:/home/adminuser/.kiro/crew-venv-0.13.1/lib/python3.12/site-packages ../max-test-env/bin/python -m pytest -n0 test/test_max_channel.py test/test_max_webhook.py --basetemp "$KIROCREW_SCRATCH/max-python-fallback"
+```
+
+Both MAX modules resolved to this checkout's `src/kiro_crew/max/`, not the installed
+package. All32 applicable core requirements had metadata; cryptography50.0.2
+remained the sole source-range mismatch (`>=42,<48`). These passing tests therefore
+prove their own mocked assertions, **not** source dependency compatibility. The
+six pytest/aiohttp warnings were retained. No OS namespace test, browser, external
+MAX subscription or candidate backend was started.
+
+Next: complete the isolated source environment from available trusted wheel
+artifacts or restored normal package access, verify every applicable requirement
+and a nonempty dependency check, then rerun the narrow MAX files in that environment
+without the fallback. Do not silently relax the cryptography constraint or replace
+installed gateway dependencies. No credentials or auth copies are needed.
+
+The owner/host step remains exactly the read-only snippet under **Browser profile:
+evidence boundary**, run in the existing ordinary host terminals on both relevant
+hosts. It refuses an agent sandbox marker, checks PID1680 identity/profile use and
+current singleton link metadata, and makes no repair. Stop if ownership remains
+unclear. No rollback is needed for that read-only step; for this Python experiment,
+stop using the separate task environment. No gateway, profile or lock restoration
+is involved. Repair and live setup still need their later reviewed decisions.
+
+The Git-sync snapshot read during this follow-up was checked at
+`2026-11-24T20:16:58.893242+00:00`, `needs_attention=0`; this MAX checkout was absent
+from its repository list. This is not proof of remote preservation. No push was
+performed under the explicit live-before-upstream restriction.
