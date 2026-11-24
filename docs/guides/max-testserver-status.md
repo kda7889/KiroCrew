@@ -13,6 +13,10 @@ Cryptography47.0.0 satisfies the source constraint. Browser/OS/live evidence is
 still missing. Native read-only process diagnostics returned an owner-scope
 denial. Details below; initial inspection facts remain historical snapshots.
 
+**Owner metadata follow-up:** the parent supplied both ordinary-host outputs.
+A new guarded owner helper is prepared below. It has only synthetic test evidence;
+it has not run against the real profile, and no lock has been moved.
+
 ## Initial migration inspection
 
 The worker's actual hostname is `testserver`. Resource status at inspection:
@@ -368,3 +372,81 @@ above; the parent will pass it to the owner. No debug retry, profile read bypass
 lock cleanup, installed gateway change, auth mint, subscription, live test or
 upstream push occurred. Browser and real OS-fence evidence still precede any
 candidate/live decision. Overall MAX readiness remains open.
+
+## Prepared owner helper: testserver only, not applied
+
+The parent's reviewed owner outputs pin different local copies:
+
+| Host | UID | SingletonLock | Lock mtime_ns | Socket/cookie mtime_ns |
+|---|---:|---|---:|---:|
+| testserver |1002|ai-ubuntu-1680|1795444513707827341|1795444513708827341|
+| ai-ubuntu |1000|ai-ubuntu-198477|1795527788660098853|1795527788660098853|
+
+Both owner outputs reported no PID1680. The parent also reported testserver's
+data-home path on its local ext4 root. These are supplied owner observations,
+not a worker read through the hidden profile. The ai-ubuntu lock198477 is outside
+this procedure and must not be changed. The old Ai-Agents-793 helper is inapplicable.
+
+The source helper is `scripts/max_singleton_owner_repair.py`. No real helper mode
+has been run by the worker. Review it before the owner confirms application.
+It refuses the sandbox marker, non-Linux/wrong-host context, UID/effective-UID
+other than1002, symlinked directory components, writable-by-others directories,
+changed link type/UID/mtime or a different lock target. Process checks refuse
+active Chromium using the profile, relative/ambiguous profile arguments and
+unavailable process metadata. It reads names/argv, never process environments,
+cookies or profile files. Only the lock symlink's target is inspected.
+
+Use an **existing ordinary testserver owner terminal**, not sudo, an agent shell,
+a container, or an SSH identity borrowed from the backup service. Keep all native
+browser launches stopped throughout. Do not clear the sandbox marker to run it.
+First perform the default read-only check:
+
+```bash
+cd /home/adminuser/.kiro/crew/workspace-member-codex-dev/kirocrew-max-source
+PYTHONPATH=src ../max-source-test-env/bin/python scripts/max_singleton_owner_repair.py --check
+```
+
+Only after review and confirmation, the same owner terminal may apply:
+
+```bash
+PYTHONPATH=src ../max-source-test-env/bin/python scripts/max_singleton_owner_repair.py --apply
+```
+
+Apply prints the exact new backup path **before** moving anything. It creates a
+private0700 sibling `max-singleton-testserver-<random>` using an exclusive mkdir.
+Only the three symlinks move there; socket/cookie first, stale lock last. The
+shared platform's atomic no-replace rename refuses existing destinations and
+unsupported filesystems; there is no overwrite fallback. Symlink inode and mtime
+are preserved. Each move rechecks source identity, moved identity and that a new
+source entry did not appear. Any failure stops and retains the backup, including
+an interrupted partial transfer. No profile directory or ordinary file moves.
+
+For undo, use exactly the printed backup path, never a guessed old backup:
+
+```bash
+PYTHONPATH=src ../max-source-test-env/bin/python scripts/max_singleton_owner_repair.py --undo /absolute/printed/max-singleton-testserver-BACKUP
+```
+
+Undo checks the private sibling, owner, permissions, allowed entries and pinned
+symlink metadata. It refuses any existing conflicting/new profile entry. It can
+restore an interrupted transfer, restores the stale lock first, and retains the
+empty backup. If anything has a new owner or metadata, stop for another review;
+do not delete the new link or force undo. The helper never launches a browser,
+stops a process, edits policy, mints auth or restarts the gateway.
+
+**Concurrency limit:** process scans and source identity checks cannot make a
+same-user browser launch or pathname replacement atomic with rename. Keep launches
+and other profile writers stopped for the whole operation. A detected race leaves
+entries/backups intact for owner review; do not treat it as a successful repair.
+No real profile recovery, browser rendering, OS-fence or live delivery is proved
+by these synthetic tests. The next step is owner review/check/apply confirmation,
+then the already prepared browser fixture and OS-fence preflights.
+
+Verification:20 synthetic tests passed,2 retained warnings, pytest6.58s,
+wall8.36s,maximumRSS196868KiB,swap0,exit0. Tests first failed with the absent helper;
+an injected replacement race then failed before the stop guard was added. The
+final run covers context refusals, exact metadata, new-owner refusal, profile
+aliases, active/ambiguous/unreadable Chromium metadata, private backups,
+no-clobber rename, partial-transfer undo and preservation of a racing new entry.
+Black/isort/Flake8 passed for both files; scoped mypy passed for the helper with
+imports skipped. No actual helper CLI mode or real profile probe ran.
