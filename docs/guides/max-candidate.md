@@ -1,8 +1,99 @@
 # MAX candidate: source review, isolated install and live proof
 
-This is an operator procedure, not an executed deployment. The source has a
-webhook receiver and owner Settings controls. No MAX live delivery has been
-proved. Do not publish upstream before the live checks pass.
+This is an isolated candidate procedure, not a production deployment. The source
+has a webhook receiver and owner Settings controls. The credential-free boot is
+verified below; no MAX live delivery has been proved. Do not publish upstream
+before the live checks pass.
+
+## Prepared trial on testserver
+
+The owner waived browser/screenshots as a trial prerequisite and will define the
+MAX screen. Do not repair a browser profile or wait for the singleton helper.
+The prepared backend wheel is0.14.0, built from source11249e86 and its own staged
+frontend (production inputs unchanged from9c73721). Wheel SHA256:
+`e643610831f959d62d1a82840985e44f4a97e79e1d41c5bee5968dbbed5e7ad8`.
+It contains the MAX backend, owner endpoints, console entrypoint and2599 bundled
+asset entries. It is installed into the existing isolated source taskenv, not the
+managed gateway. The already verified93 dependencies were reused without another
+download or55-test rerun.
+
+Concrete private trial root:
+`/home/adminuser/.kiro/crew/workspace-member-codex-dev/_only_local/max-trial-11249e86`.
+The wheel is retained there; `os-home` is a fresh private HOME. No auth, live
+configuration, vault, profile or provider session was copied. A bounded,
+credential-free headless boot on127.0.0.1:55476 returned health200 and unauthenticated
+pairing403; that owned process was stopped. Version/gateway-help/secrets-help
+entrypoints passed from the installed wheel outside the source checkout.
+
+In an **ordinary owner terminal** on testserver, run:
+
+```bash
+cd /home/adminuser/.kiro/crew/workspace-member-codex-dev/kirocrew-max-source
+sh scripts/max_trial.sh
+```
+
+The launcher refuses the agent sandbox marker; never clear it. It uses the fresh
+HOME/data home, loopback55476, no tunnel, no automatic browser or cron scheduler,
+and interactive approvals. It clears inherited environment credentials before
+running the candidate. It supplies only vault references for MAX, never a token
+value. Keep this foreground process in the owner terminal; it is not a service.
+If55476 is occupied, stop for review rather than stopping the other listener.
+
+In a second terminal, the supported owner sign-in command is:
+
+```bash
+cd /home/adminuser/.kiro/crew/workspace-member-codex-dev/kirocrew-max-source
+sh scripts/max_trial.sh token
+```
+
+Open that private link only in a separate private window in the owner's browser.
+Do not paste it into chat.
+When the browser is on another machine, use the owner's existing trusted SSH
+access with a local55476 forward to testserver's127.0.0.1:55476. No public listener
+or new HTTPS ingress is needed for the polling trial. The agent did not mint or
+exchange a dashboard token through an API or copy an existing login.
+
+For the shortest **development/test live trial**, use a dedicated bot with no
+active webhook or other receiver. In authenticated **Settings → Secrets**, save
+its fresh replacement token as Custom Secret `max-bot`. The CLI currently supports
+secret import/authorization, not secret set; do not use a made-up CLI or DevTools.
+The exposed chat token must be revoked and never reused. MAX is initially disabled
+with an empty owner allowlist. After saving the new Secret, stop only this foreground
+candidate with Ctrl-C, then use its normal configuration command and restart:
+
+```bash
+sh scripts/max_trial.sh config set max.delivery_mode polling
+sh scripts/max_trial.sh config set max.enabled true
+sh scripts/max_trial.sh
+```
+
+In **Settings → Channels → MAX**, press **Pair owner**. Send the displayed
+`/start <code>` to that bot in a private chat within five minutes; no first sender
+or group is trusted. Send `/help` and require a real MAX response. This proves
+the transport/owner-command path without an LLM provider login. For an ordinary
+text/model response, complete the candidate's normal ACP backend login against
+this fresh HOME using the onboarding/provider flow; do not copy the working
+provider's auth. KAS has the supported owner command below. Its pinned engine is
+installed by the normal first-spawn path; `kas install` is also the supported
+explicit preparation if the owner wants it before the first model turn.
+
+```bash
+sh scripts/max_trial.sh kas login
+```
+
+Then send a short text and test `/stop` during a running turn. A `/help` reply
+alone does not prove an authenticated model turn or tool execution.
+
+Stop/undo: Ctrl-C in the candidate foreground terminal. Leave the private trial
+directory for owner review; no installed service or existing home needs restoring.
+Do not publish the wheel or trial home: the latter will contain the owner's new
+vault after setup. The source launcher and this instruction contain no secrets.
+
+The real OS-fence proof remains open; no namespace/policy/Secrets boundary was
+weakened. Polling is only this explicit development/test trial, **not production
+readiness**. Production still needs the webhook setup/HTTPS443 path below and its
+own live proof. Source/browser gates listed later retain their historical scope;
+they do not reintroduce the owner's waived screenshot prerequisite for this trial.
 
 ## Versions and gates
 
