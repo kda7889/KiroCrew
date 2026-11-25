@@ -32,6 +32,7 @@ import { KiroAccountUnlocksList } from './KiroAccountUnlocks'
 import {
   SignInStoreUnreadableErrors,
   KiroSignInSourcesNotice,
+  noticeLeadsCard,
   SOURCES_QUERY_KEY,
   sourcesNotice,
   useKiroSignInSources,
@@ -360,7 +361,7 @@ export function KiroSignInCard() {
   // account, and this app's own sign-in choices still show in place under it.
   // The code step keeps the normal header, which names the step.
   const cliAccount = useKiroCliAccountName(sources)
-  const cliHeader = signedOut && notice === 'using_kiro_cli' && !back
+  const cliHeader = signedOut && (notice === 'using_kiro_cli' || notice === 'kiro_cli_harness') && !back
   return (
     <section
       data-setting-key={KIRO_SIGN_IN_HIGHLIGHT_ANCHOR}
@@ -382,7 +383,7 @@ export function KiroSignInCard() {
           </p>
         </div>
       ) : null}
-      {notice === 'using_kiro_cli' ? (
+      {noticeLeadsCard(notice) ? (
         // The header already says "Using your Kiro CLI sign-in" when it has no name.
         <KiroSignInSourcesNotice sources={sources} identity="" hideTitle={cliHeader && !cliAccount.name} />
       ) : null}
@@ -414,7 +415,7 @@ export function KiroSignInCard() {
           <SignInBody
             renderSignedIn={(status, reauth) => (
               <>
-                {notice !== 'using_kiro_cli' ? (
+                {!noticeLeadsCard(notice) ? (
                   <KiroSignInSourcesNotice sources={sources} identity={status.identity ?? ''} />
                 ) : null}
                 <SignedInSummary status={status} onReauth={reauth} />

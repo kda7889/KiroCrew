@@ -872,7 +872,20 @@ engine instead ([aws-control.md](aws-control.md)).
   comes from the store read alone, so a slow or failed `whoami` is unknown, never
   "signed out". With no vault sign-in and a usable kiro-cli one that the relay would run
   on (`kas_route.relay_runs_on_kiro_cli_sign_in`), the card says Kiro Agent is using
-  the Kiro CLI sign-in. Usable (`kiro_cli.usable`) follows the edition: on oss it
+  the Kiro CLI sign-in. When the main harness is Kiro CLI (`agent.acp_backend` loads
+  as `kiro`: a Kiro CLI pick the gateway has not moved onto KAS, so sessions start
+  kiro-cli's v2 launch, which never asks Crew for a credential), the answer carries
+  `kiro_cli_harness: true` and `active` follows kiro-cli's own login alone, whatever
+  the vault holds: `kiro_cli` when its store holds one or a `KIRO_API_KEY` reaches it
+  (`kas_route.kiro_cli_api_key_set`), `none` only when `kas_route.kiro_cli_signed_out`
+  proves it signed out, and `unknown` otherwise. The relay check is not asked and `can_use_kiro_cli` is false there. The
+  card then says the agents run as the Kiro CLI account, that only Kiro Agent uses a
+  sign-in made on the card, and links to Agent Harness to switch; with kiro-cli
+  signed out it says the agents cannot start, leads with choosing Kiro Agent (the
+  dashboard way forward, which runs on the card's sign-in) and names `kiro-cli login`
+  second, since the dashboard has no control that signs kiro-cli in. It never
+  compares the two accounts on that harness.
+  Usable (`kiro_cli.usable`) follows the edition: on oss it
   means stored, the presence rule the relay itself decides by
   (`kas_route.kiro_cli_signed_out`), because kiro-cli renews its own access token when
   it runs, so a token past its lifetime (about an hour) still runs sessions; on an

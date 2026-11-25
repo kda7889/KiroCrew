@@ -32,7 +32,8 @@ export function KiroAccountStatusLine() {
   const storeUnknown = sources?.kiro_crew?.stored === null || sources?.kiro_cli?.stored === null
   let text: string | null = null
   if (status && !status.authenticated) {
-    if (sourcesNotice(sources) === 'using_kiro_cli') text = i18nT('pages.developer.kiroSignInCard.using_kiro_cli_title')
+    const notice = sourcesNotice(sources)
+    if (notice === 'using_kiro_cli' || notice === 'kiro_cli_harness') text = i18nT('pages.developer.kiroSignInCard.using_kiro_cli_title')
     // Unknown, not signed out: the errors above say which read failed.
     else if (!storeUnknown && !sourcesError) text = i18nT('pages.developer.agentBackendTab.kiro_account_not_signed_in')
   } else if (status && signInLapsed(status)) text = i18nT('pages.developer.kiroSignInCard.sign_in_expired')

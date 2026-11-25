@@ -4,10 +4,14 @@
 ``GET /api/kas-login``: whether kiro-cli is signed in beside Kiro Crew's own
 sign-in, which of the two sessions use, and whether they are one account.
 
-A session uses Kiro Crew's stored sign-in when there is one and kiro-cli's only
-when there is none (:func:`kiro_crew.lts_sign_in.select`). This handler reads the
-same two stores by presence (:func:`kiro_crew.lts_sign_in.stored_sign_ins`) and
-changes nothing about that choice.
+A KAS session uses Kiro Crew's stored sign-in when there is one and kiro-cli's
+only when there is none (:func:`kiro_crew.lts_sign_in.select`). The Kiro CLI
+harness (a main ``agent.acp_backend`` that loads as ``kiro``: kiro-cli's v2
+launch) never asks Kiro Crew for a credential, so there kiro-cli's sign-in is the
+one in use whatever the vault holds (``kiro_cli_harness`` in the answer). This
+handler reads the same two stores by presence
+(:func:`kiro_crew.lts_sign_in.stored_sign_ins`) and changes nothing about either
+choice.
 
 What the answer may carry is fixed by :data:`_ACCOUNT_FIELDS`: an account's kind,
 the host of its sign-in portal, and its e-mail when kiro-cli reports one. Never a
@@ -90,8 +94,57 @@ def _kiro_cli_usable(entry: Any) -> bool:
     return entry is not None and (entry.live or not edition.is_lts())
 
 
-def _read_stores() -> tuple[Any, dict[str, object], bool]:
-    """Both stores, Kiro Crew's account fields, and whether kiro-cli's sign-in would run.
+def main_harness_is_kiro_cli() -> bool:
+    """Whether the main harness is the Kiro CLI one, which runs on kiro-cli's sign-in.
+
+    True when ``agent.acp_backend`` loads as ``kiro``: a Kiro CLI pick the gateway
+    has not moved onto KAS (``agent_sdk.backends.kiro_cli_pick_backend``), so
+    sessions start kiro-cli's v2 launch, which reads kiro-cli's own store and never
+    the vault. A config that cannot be loaded answers False, which keeps the KAS
+    answer the card gave before. Blocking (config read); never raises.
+    """
+    from kiro_crew.agent_sdk.backends import ACP_BACKEND_KIRO
+    from kiro_crew.config.loader import KiroCrewConfig
+
+    try:
+        return KiroCrewConfig.load().agent.acp_backend == ACP_BACKEND_KIRO
+    except Exception:  # noqa: BLE001 - an unknown harness changes nothing here
+        logger.debug("could not read the main harness", exc_info=True)
+        return False
+
+
+def _kiro_cli_harness_active(stored: Any) -> str:
+    """The ``active`` answer on the Kiro CLI harness, from kiro-cli's own sign-in alone.
+
+    kiro-cli's v2 launch reads its own store, or a ``KIRO_API_KEY``, and renews its
+    own token, so the vault plays no part. Signed out only when that is proven
+    (:func:`kiro_crew.acp.kas_route.kiro_cli_signed_out`); any other doubt is
+    unknown. Blocking file IO.
+    """
+    import os
+    from pathlib import Path
+
+    from kiro_crew.acp import kas_route
+
+    if stored.kiro_cli is not None:
+        return ACTIVE_KIRO_CLI
+    try:
+        if kas_route.kiro_cli_api_key_set(os.environ):
+            return ACTIVE_KIRO_CLI
+    except Exception:  # noqa: BLE001 - an unreadable .env proves nothing
+        logger.debug("could not read the kiro-cli API key", exc_info=True)
+        return ACTIVE_UNKNOWN
+    if not stored.kiro_cli_readable:
+        return ACTIVE_UNKNOWN
+    if kas_route.kiro_cli_signed_out(environ=os.environ, home=Path.home()):
+        return ACTIVE_NONE
+    return ACTIVE_UNKNOWN
+
+
+def _read_stores() -> tuple[Any, dict[str, object], bool, Optional[str]]:
+    """Both stores, Kiro Crew's account fields, whether kiro-cli's sign-in would run
+    a KAS session, and the ``active`` answer when the main harness is Kiro CLI
+    (``None`` on any other harness).
 
     Blocking file IO -- call off the loop.
     """
@@ -103,10 +156,11 @@ def _read_stores() -> tuple[Any, dict[str, object], bool]:
     crew_fields: dict[str, object] = {}
     if stored.vault is not None:
         crew_fields = vault_identity_snapshot_sync()[1]
+    harness_active = _kiro_cli_harness_active(stored) if main_harness_is_kiro_cli() else None
     relay = False
-    if _kiro_cli_usable(stored.kiro_cli):
+    if _kiro_cli_usable(stored.kiro_cli) and harness_active is None:
         relay = relay_runs_on_kiro_cli_sign_in()
-    return stored, crew_fields, relay
+    return stored, crew_fields, relay, harness_active
 
 
 async def _whoami() -> Optional[dict[str, object]]:
@@ -160,7 +214,7 @@ async def api_kas_login_sources(request: web.Request) -> web.Response:
     if denied is not None:
         return denied
     try:
-        stored, crew_fields, relay = await asyncio.to_thread(_read_stores)
+        stored, crew_fields, relay, harness_active = await asyncio.to_thread(_read_stores)
     except Exception:  # noqa: BLE001 - never an anonymous 500 for a status read
         logger.debug("could not read the stored sign-ins", exc_info=True)
         return web.json_response(
@@ -189,7 +243,9 @@ async def api_kas_login_sources(request: web.Request) -> web.Response:
             vault_portal=crew.get("portal_host", ""),
             cli_portal=named.get("portal_host", ""),
         )
-    if stored.vault is not None:
+    if harness_active is not None:
+        active = harness_active
+    elif stored.vault is not None:
         active = ACTIVE_KIRO_CREW
     elif not stored.vault_readable or not stored.kiro_cli_readable:
         active = ACTIVE_UNKNOWN
@@ -234,5 +290,6 @@ async def api_kas_login_sources(request: web.Request) -> web.Response:
             "name_unreadable": unreadable,
             "same_account": same,
             "can_use_kiro_cli": can_use_kiro_cli,
+            "kiro_cli_harness": harness_active is not None,
         }
     )
