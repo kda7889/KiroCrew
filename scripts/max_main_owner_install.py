@@ -173,6 +173,35 @@ def inspect_tree(root, *, state=False):
     return size
 
 
+def space_report():
+    """Owner metadata only: preserve the full backup and retained-restore budget."""
+    state_size = inspect_tree(STATE, state=True)
+    runtime_size = inspect_tree(RUNTIME)
+    size = state_size + runtime_size
+    fs = os.statvfs(BASE.parent)
+    available = fs.f_bavail * fs.f_frsize
+    required = 2 * size + 512 * 1024 * 1024
+    return {
+        "state_bytes": state_size,
+        "runtime_bytes": runtime_size,
+        "source_bytes": size,
+        "available_bytes": available,
+        "reserved_bytes": max(0, fs.f_bfree - fs.f_bavail) * fs.f_frsize,
+        "required_bytes": required,
+        "shortfall_bytes": max(0, required - available),
+        "restore_floor_bytes": size + 512 * 1024 * 1024,
+    }
+
+
+def require_space():
+    report = space_report()
+    if report["shortfall_bytes"]:
+        raise ValueError(
+            "insufficient space for verified backup and retained rollback state: "
+            + ", ".join(f"{key}={value}" for key, value in report.items())
+        )
+
+
 def archive_tree(root, archive):
     run(
         [
@@ -338,11 +367,9 @@ def apply():
     ):
         raise ValueError("expected the current system service to be active")
     wait_health("0.13.1")
-    size = inspect_tree(STATE, state=True) + inspect_tree(RUNTIME)
     if BASE.stat().st_dev != STATE.stat().st_dev or BASE.stat().st_dev != RUNTIME.stat().st_dev:
         raise ValueError("backup and restored trees must share a filesystem for retained renames")
-    if shutil.disk_usage(BASE).free < 2 * size + 512 * 1024 * 1024:
-        raise ValueError("insufficient space for verified backup and retained rollback state")
+    require_space()
     backup = Path(tempfile.mkdtemp(prefix="main-", dir=BASE))
     global LOG
     with (backup / "operations.log").open("xb") as LOG:
@@ -351,9 +378,7 @@ def apply():
         try:
             stop_service()
             stopped = True
-            size = inspect_tree(STATE, state=True) + inspect_tree(RUNTIME)
-            if shutil.disk_usage(BASE).free < 2 * size + 512 * 1024 * 1024:
-                raise ValueError("insufficient backup space after the service stopped")
+            require_space()
             archive_tree(STATE, backup / "state.tar")
             archive_tree(RUNTIME, backup / "runtime.tar")
             manifest = {name: digest(backup / name) for name in ("state.tar", "runtime.tar")}
@@ -387,13 +412,18 @@ def main():
     check_operator()
     if not sys.flags.isolated:
         raise ValueError("run the owner command with python3 -I")
+    parser = argparse.ArgumentParser(description=__doc__)
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--undo", type=Path)
+    mode.add_argument("--space-report", action="store_true")
+    args = parser.parse_args()
+    if args.space_report:
+        print(json.dumps(space_report(), indent=2))
+        return
     os.umask(0o077)
     BASE.mkdir(mode=0o700, exist_ok=True)
     if BASE.is_symlink() or BASE.stat().st_uid != 0 or stat.S_IMODE(BASE.stat().st_mode) != 0o700:
         raise ValueError("backup root must be root-owned mode 0700, not a symlink")
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--undo", type=Path)
-    args = parser.parse_args()
     with (BASE / ".lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         if args.undo:

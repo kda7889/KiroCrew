@@ -101,6 +101,48 @@ def test_changed_archive_is_refused(helper, tmp_path):
         helper.verify_digest(archive, digest)
 
 
+def test_space_report_separates_restore_archive_and_reserved_blocks(helper, monkeypatch):
+    sizes = {helper.STATE: 11 * 1024**3, helper.RUNTIME: 821 * 1024**2}
+    monkeypatch.setattr(helper, "inspect_tree", lambda root, **kwargs: sizes[root])
+    monkeypatch.setattr(
+        helper.os,
+        "statvfs",
+        lambda root: SimpleNamespace(f_frsize=4096, f_bavail=1835008, f_bfree=3145728),
+    )
+    report = helper.space_report()
+    size = sum(sizes.values())
+    assert report["source_bytes"] == size
+    assert report["available_bytes"] == 7 * 1024**3
+    assert report["reserved_bytes"] == 5 * 1024**3
+    assert report["required_bytes"] == 2 * size + 512 * 1024**2
+    assert report["shortfall_bytes"] == report["required_bytes"] - report["available_bytes"]
+    assert report["restore_floor_bytes"] == size + 512 * 1024**2
+
+
+def test_space_guard_reports_bytes_without_using_reserved_blocks(helper, monkeypatch):
+    monkeypatch.setattr(
+        helper,
+        "space_report",
+        lambda: {"available_bytes": 7, "required_bytes": 25, "shortfall_bytes": 18},
+    )
+    with pytest.raises(
+        ValueError, match="available_bytes=7.*required_bytes=25.*shortfall_bytes=18"
+    ):
+        helper.require_space()
+
+
+def test_space_only_mode_cannot_create_backups_or_control_service(helper, monkeypatch, capsys):
+    monkeypatch.setattr(helper, "check_operator", lambda: None)
+    monkeypatch.setattr(helper.sys, "flags", SimpleNamespace(isolated=True))
+    monkeypatch.setattr(helper.sys, "argv", ["owner-helper", "--space-report"])
+    monkeypatch.setattr(helper, "space_report", lambda: {"source_bytes": 123})
+    monkeypatch.setattr(helper, "apply", lambda: pytest.fail("deployment is forbidden"))
+    monkeypatch.setattr(helper, "rollback", lambda p: pytest.fail("rollback is forbidden"))
+    monkeypatch.setattr(helper.Path, "mkdir", lambda *a, **k: pytest.fail("write is forbidden"))
+    helper.main()
+    assert json.loads(capsys.readouterr().out) == {"source_bytes": 123}
+
+
 def test_only_scalar_systemd_properties_are_requested(helper, monkeypatch):
     seen = []
 
@@ -269,6 +311,18 @@ def prepared_apply(helper, monkeypatch, tmp_path):
     monkeypatch.setattr(helper, "archive_tree", archive)
     monkeypatch.setattr(helper, "rollback", lambda p: events.append("rollback"))
     return helper, events
+
+
+def test_insufficient_space_never_stops_service(prepared_apply, monkeypatch):
+    helper, events = prepared_apply
+
+    def refuse():
+        raise ValueError("insufficient space")
+
+    monkeypatch.setattr(helper, "require_space", refuse)
+    with pytest.raises(ValueError, match="insufficient space"):
+        helper.apply()
+    assert events == []
 
 
 def test_failed_backup_restarts_old_service_without_mutation(prepared_apply, monkeypatch):

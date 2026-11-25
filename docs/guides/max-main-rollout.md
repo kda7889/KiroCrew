@@ -2,6 +2,72 @@
 
 ## Current owner-run step
 
+**Installation is blocked on capacity. Do not rerun the install command below.**
+The owner's helper refused before stopping the service or installing anything.
+The read-only diagnostic command is:
+
+```bash
+sudo /usr/bin/python3 -I /home/adminuser/.kiro/crew/workspace-member-codex-dev/kirocrew-max-source/scripts/max_main_owner_install.py --space-report
+```
+
+This mode checks the same native-owner/sandbox/terminal guards, counts file
+metadata and prints byte totals. It creates no backup, lock or log, reads no
+file contents and makes no service or network call. It must run in the owner's
+ordinary host terminal: the agent's masked filesystem cannot measure full host
+state. Active files may change; deployment rechecks after stopping the service.
+
+### Capacity and retention
+
+The deployment guard remains `2 * source_bytes + 536870912` available bytes:
+one uncompressed archive plus one complete restored tree, retaining the failed
+tree by rename on the same filesystem. Existing source files already consume
+disk space; renaming them into the backup does not allocate another copy.
+`source_bytes` is the sum of regular-file logical sizes, including each hardlink
+name, not `du`'s allocated-block count. It is conservative for hardlinks/sparse
+files. Tar overhead and operating headroom share the additional512MiB; this is
+not a filesystem-resize procedure or a promise of unlimited migration growth.
+
+Read-only `df` in the agent namespace reports the same root ext4 LV, with
+129662488576 total bytes and7636422656 available bytes (120.76 and7.11GiB).
+`statvfs` additionally exposes about5.55GiB reserved blocks. Those blocks are
+not counted as deployment capacity and the helper does not reduce filesystem
+reserves. The125GiB physical disk is not125GiB of free space. Bind mounts and
+hidden leaves mean an agent `du` of the data home is not a host backup inventory.
+No separate existing data filesystem is visible in the current namespace;
+`/boot` is not a backup target. This does not rule out unattached host storage.
+
+The parent's rounded host `du` is11GiB state plus821MiB runtime: roughly11.80GiB
+source,24.10GiB guard,16.99GiB shortfall. These are estimates, not the exact
+logical-byte result; `--space-report` prints that result and its shortfall.
+
+Compression alone does not meet the retained-tree rollback contract. Even an
+impossibly zero-byte compressed archive would still require about12.30GiB free
+for the full restored tree plus headroom, exceeding7.11GiB. With a measured
+compressed size `C`, the requirement would be `C + source_bytes + 536870912`;
+no real compression ratio or compressed recovery has been measured. Restoring
+in place, removing old trees or omitting private stores is not a substitute for
+the reviewed retention scheme. A compressed backup on another filesystem would
+still leave the full restore allocation on root; the current helper deliberately
+does not support cross-filesystem retained renames.
+
+Scoped own-artifact measurements: source build directory298487808 bytes,
+frontend node_modules944943104 bytes, together1.16GiB. Source checkout2.09GiB,
+task testenv0.69GiB and all own `_only_local` artifacts1.26GiB total4.05GiB;
+these totals include useful committed source and retained trial state and are
+**not** deletion candidates as a whole. Even deleting all4.05GiB, which is not
+authorized or proposed, would not close the present24.10GiB guard. Deleting
+reproducible artifacts within the archived data home can also reduce the source
+budget, but the known1.16GiB build/dependency outputs remain insufficient. No
+files were deleted and no other member's data was inventoried.
+
+The safe next capacity decision is to provision sufficient free space on the
+existing root filesystem, based on the native byte report, before retrying.
+About18GiB additional available capacity would cover the rounded current
+shortfall with some margin; this is not an exact resize command or approval to
+change LVM/partitions. No approved attached backup volume or supported storage
+resize entrypoint has been established. Keep the install blocked until capacity
+is actually available; do not weaken the guard or retry it unchanged.
+
 The parent confirmed the manager on2026-11-25 at21:45UTC: system scope,
 `/etc/systemd/system/kirocrew.service`, drop-in `primary.conf`,
 reported MainPID1466, launcher `crew-venv-current/bin/kirocrew gateway --no-open`.
