@@ -29,6 +29,7 @@ import { writePrefill } from '../utils/navIntent'
 import type { Artifact, ArtifactComment, CommentAnchor } from '../types'
 
 import { i18nT } from '../i18n/t'
+import { fmtDate, toDate } from '../i18n/format'
 import { errMessage } from '../utils/thunkError'
 import ErrorNotice from '../components/ErrorNotice'
 import { useArtifactDetailPageState, useArtifactDetailPageDocument } from './useArtifactDetailPageDocument'
@@ -418,6 +419,9 @@ export default function ArtifactDetailPage({ popout = false }: { popout?: boolea
 }
 
 
+// A dated publication warns in its last week (display only, the browser's clock).
+const EXPIRY_WARNING_MS = 7 * 24 * 60 * 60 * 1000
+
 // Static theme-token class sets (Tailwind JIT needs literal strings, not
 // interpolated tone names).
 const _SYNC_TONES: Record<string, { wrap: string; btn: string }> = {
@@ -439,6 +443,8 @@ function UpstreamSyncBanner({ artifact, busy = false, onPulled, onBeforeMutate }
   // actually ahead) — rendered in a neutral tone, not danger-red, so a no-op
   // pull on an up-to-date fork doesn't look like a failure.
   const [notice, setNotice] = useState('')
+  // Read once per mount: the warning is a date, never a countdown.
+  const [now] = useState(() => Date.now())
   // The whole banner is gated on a registered publish provider: the public
   // edition ships an empty registry, so providers resolves to [] and this
   // component renders nothing (an artifact can only carry fork_metadata /
@@ -571,7 +577,10 @@ function UpstreamSyncBanner({ artifact, busy = false, onPulled, onBeforeMutate }
   // provider cannot smuggle a javascript:/file: URL into it. Worded like the
   // Publish panel's link to a public-web copy, since both open the published page.
   const publishedUrl = safeHttpUrl(pub?.view_url || '')
-  const publishedLink = publishedUrl && (
+  // The gateway decides `expired`; an expired copy is gone, so its link is not offered.
+  const expiresAt = toDate(pub?.expires_at || null)
+  const expiresOn = expiresAt ? fmtDate(expiresAt) : ''
+  const publishedLink = publishedUrl && !pub?.expired && (
     <a href={publishedUrl} target="_blank" rel="noopener noreferrer" className="underline hover:no-underline">
       {i18nT('pages.artifactDetailPage.open_published_page')}
     </a>
@@ -580,13 +589,15 @@ function UpstreamSyncBanner({ artifact, busy = false, onPulled, onBeforeMutate }
   // Local edits not yet published, with no remote drift: a visible prompt to
   // publish them. (When the remote is ALSO ahead, the pull/overwrite banner
   // below handles it and already reassures that local edits are checkpointed.)
-  if (!fm && !upstreamAhead && pub && hasLocalEdits) {
+  // An expired copy is gone, so there is nothing to publish edits to: it says so below.
+  if (!fm && !upstreamAhead && pub && hasLocalEdits && !pub.expired) {
     return (
       <div className="mb-3 flex items-center gap-2 px-3 py-2 rounded-md border text-[13px] border-warn/40 bg-warn-subtle text-warn-text">
         <Camera size={14} className="lucide-inline shrink-0" />
         <span className="flex-1">
           {i18nT('pages.artifactDetailPage.local_changes_not_yet_published_to')} {provLabel}.
           {publishedLink && <>{' · '}{publishedLink}</>}
+          {expiresOn && <>{' · '}{i18nT('pages.artifactDetailPage.publication_expires_on', { date: expiresOn })}</>}
         </span>
         {/* No hand-off: editor buffer editedContent may be dirty */}
         <ErrorNotice variant="inline" message={error} />
@@ -611,13 +622,21 @@ function UpstreamSyncBanner({ artifact, busy = false, onPulled, onBeforeMutate }
   // Not a fork and the remote copy isn't ahead: nothing to sync, so a published
   // artifact shows only where its published copy lives.
   if (!fm && !upstreamAhead) {
-    if (!pub || !publishedLink) return null
-    const info = _SYNC_TONES.info
+    if (!pub || !publishedUrl) return null
+    const expiringSoon = !!expiresAt && expiresAt.getTime() - now <= EXPIRY_WARNING_MS
+    const tone = _SYNC_TONES[pub.expired || expiringSoon ? 'warn' : 'info']
     return (
-      <div className={`mb-3 flex items-center gap-2 px-3 py-2 rounded-md border text-[13px] ${info.wrap}`}>
+      <div data-testid="publication-banner" className={`mb-3 flex items-center gap-2 px-3 py-2 rounded-md border text-[13px] ${tone.wrap}`}>
         <Globe size={14} className="lucide-inline shrink-0" />
         <span className="flex-1">
-          {i18nT('pages.artifactDetailPage.published_to_provider', { provider: provLabel })}{' · '}{publishedLink}
+          {pub.expired ? (
+            i18nT('pages.artifactDetailPage.published_to_provider_expired', { provider: provLabel, date: expiresOn })
+          ) : (
+            <>
+              {i18nT('pages.artifactDetailPage.published_to_provider', { provider: provLabel })}{' · '}{publishedLink}
+              {expiresOn && <>{' · '}{i18nT('pages.artifactDetailPage.publication_expires_on', { date: expiresOn })}</>}
+            </>
+          )}
         </span>
       </div>
     )

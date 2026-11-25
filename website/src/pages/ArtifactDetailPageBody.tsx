@@ -311,11 +311,12 @@ export function ArtifactPublicationNotices({ artifact, editorRead, className = '
       {/* Read-only publication sync-error surface: keeps a persisted sync
           error visible (no controls) if a publishing provider is ever
           registered. Inert in the public edition, where the registry is empty
-          and `artifact.publication` is always null. */}
+          and `artifact.publication` is always null. An expired copy is gone, so
+          its stored error no longer describes it. */}
       {/* No hand-off: see the doc comment above. */}
       <ErrorNotice
         title={i18nT('pages.artifactDetailPage.publication_sync_issue')}
-        message={artifact.publication?.last_error}
+        message={artifact.publication?.expired ? null : artifact.publication?.last_error}
         className={className}
       />
 
@@ -323,8 +324,9 @@ export function ArtifactPublicationNotices({ artifact, editorRead, className = '
           it just is not reachable yet (e.g. CloudFront still rolling out). That
           is not a failure, so it renders as a neutral/warn line -- never the
           danger surface `last_error` drives. Suppressed when a real error is
-          present, since that is the more important thing to show. */}
-      {artifact.publication?.notice && !artifact.publication.last_error && (
+          present, since that is the more important thing to show, and once the
+          copy expired. */}
+      {artifact.publication?.notice && !artifact.publication.last_error && !artifact.publication.expired && (
         <div className={`${className} flex items-start gap-2 px-3 py-2 rounded-md border border-warn/30 bg-warn-subtle text-[13px] text-warn-text`}>
           <AlertTriangle className="lucide-inline shrink-0 mt-0.5" />
           <span className="min-w-0 flex-1">{i18nT(publishNoticeKey({

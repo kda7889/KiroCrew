@@ -27,6 +27,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { screen, waitFor, fireEvent, within, act } from '@testing-library/react'
 import { i18nT } from '../i18n/t'
+import { fmtDate } from '../i18n/format'
 import { confirmAction } from './confirmAction'
 import { Routes, Route, useNavigate } from 'react-router-dom'
 import ArtifactDetailPage from '../pages/ArtifactDetailPage'
@@ -1522,6 +1523,85 @@ describe('ArtifactDetailPage — upstream sync banner', () => {
     expect(link).toHaveAttribute('target', '_blank')
     // Names where the copy lives, as the unpublished-edits prompt does.
     expect(screen.getByText(/Published to Companion Cloud/)).toBeInTheDocument()
+  })
+
+  // A dated publication: the gateway's `expired` decides "Expired"; the warning in the
+  // last 7 days reads the browser clock, frozen here so the window is exact.
+  describe('a dated publication', () => {
+    const NOW = '2026-11-25T12:00:00Z'
+    const banner = () => screen.getByTestId('publication-banner')
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(new Date(NOW))
+      vi.mocked(api).upstreamStatus = vi.fn().mockResolvedValue({})
+    })
+    afterEach(() => { vi.useRealTimers() })
+
+    it('shows the date it expires on beside the live link', async () => {
+      const expiresAt = '2026-12-25T12:00:00+00:00'
+      await mount(mkArtifact({ publication: { ...publication, expires_at: expiresAt, expired: false } }))
+      await screen.findByRole('link', { name: /Open published page/i }, PUBLISHED_LINE_WAIT)
+      expect(banner().textContent).toContain(`Expires on ${fmtDate(expiresAt)}`)
+      expect(banner().className).toContain('bg-info-subtle')
+    })
+
+    it('shows the same date in the warning style within its last 7 days', async () => {
+      const expiresAt = '2026-12-01T12:00:00+00:00'
+      await mount(mkArtifact({ publication: { ...publication, expires_at: expiresAt, expired: false } }))
+      await screen.findByRole('link', { name: /Open published page/i }, PUBLISHED_LINE_WAIT)
+      expect(banner().textContent).toContain(`Expires on ${fmtDate(expiresAt)}`)
+      expect(banner().className).toContain('bg-warn-subtle')
+    })
+
+    it('says it expired and offers no live link once the gateway says so', async () => {
+      const expiresAt = '2026-11-20T12:00:00+00:00'
+      await mount(mkArtifact({ publication: { ...publication, expires_at: expiresAt, expired: true } }))
+      expect(await screen.findByText(
+        `Publication on Companion Cloud expired on ${fmtDate(expiresAt)}`, {}, PUBLISHED_LINE_WAIT,
+      )).toBeInTheDocument()
+      expect(screen.queryByRole('link', { name: /Open published page/i })).toBeNull()
+      expect(banner().textContent).not.toMatch(/Expires on/)
+      expect(banner().className).toContain('bg-warn-subtle')
+    })
+
+    it('shows the date it expires on beside the unpublished-edits prompt', async () => {
+      vi.mocked(api).upstreamStatus = vi.fn().mockResolvedValue({ local_ahead: true })
+      const expiresAt = '2026-12-01T12:00:00+00:00'
+      await mount(mkArtifact({ publication: { ...publication, expires_at: expiresAt, expired: false }, live_dirty: true }))
+      const prompt = await screen.findByText(/Local changes not yet published to/, {}, PUBLISHED_LINE_WAIT)
+      expect(prompt.textContent).toContain(`Expires on ${fmtDate(expiresAt)}`)
+    })
+
+    it('says it expired, not that local edits await publishing, after an edit', async () => {
+      vi.mocked(api).upstreamStatus = vi.fn().mockResolvedValue({ local_ahead: true })
+      const expiresAt = '2026-11-20T12:00:00+00:00'
+      await mount(mkArtifact({ publication: { ...publication, expires_at: expiresAt, expired: true }, live_dirty: true }))
+      expect(await screen.findByText(
+        `Publication on Companion Cloud expired on ${fmtDate(expiresAt)}`, {}, PUBLISHED_LINE_WAIT,
+      )).toBeInTheDocument()
+      expect(screen.queryByText(/Local changes not yet published to/)).toBeNull()
+      expect(screen.queryByTitle(/Snapshot the current content as a new version/i)).toBeNull()
+    })
+
+    it.each([
+      ['a sync error', { last_error: 'sync failed: 404 Not Found' }, /Publication sync issue/],
+      ['a notice', { notice: 'rolling out', notice_code: 'rolling_out' }, /Still rolling out/],
+    ])('shows no stored %s once it expired', async (_label, stored, text) => {
+      const expiresAt = '2026-11-20T12:00:00+00:00'
+      await mount(mkArtifact({ publication: { ...publication, ...stored, expires_at: expiresAt, expired: true } }))
+      await screen.findByText(`Publication on Companion Cloud expired on ${fmtDate(expiresAt)}`, {}, PUBLISHED_LINE_WAIT)
+      expect(screen.queryByText(text)).toBeNull()
+      expect(screen.queryByRole('button', { name: /Re-check this publication's status/i })).toBeNull()
+    })
+  })
+
+  it('renders a publication with no expiry fields exactly as before', async () => {
+    vi.mocked(api).upstreamStatus = vi.fn().mockResolvedValue({})
+    await mount(mkArtifact({ publication }))
+    await screen.findByRole('link', { name: /Open published page/i }, PUBLISHED_LINE_WAIT)
+    const banner = screen.getByTestId('publication-banner')
+    expect(banner.textContent).toBe('Published to Companion Cloud · Open published page')
+    expect(banner.className).toContain('bg-info-subtle')
   })
 
   it('links the published copy beside the unpublished-edits prompt', async () => {
