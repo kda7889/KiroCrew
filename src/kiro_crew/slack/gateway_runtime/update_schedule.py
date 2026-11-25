@@ -152,6 +152,13 @@ def _in_flight_work_census(self: GatewayOrchestrator) -> list[work_holders.Holde
         builds = wheel_apply.applies_in_flight()
         if builds:
             held.append(Holder(work_holders.UPDATE_BUILD, count=builds))
+    # An installed app updating itself unattended: a restart now would replace
+    # the process with the app stopped and its tree half swapped. Looked up in
+    # ``sys.modules`` like the apply module, since only a loaded loop can be
+    # applying.
+    app_updates = sys.modules.get("kiro_crew.apps.auto_update")
+    if app_updates is not None and app_updates.applying():
+        held.append(Holder(work_holders.APP_UPDATE))
 
     seen_handler_tasks: set[int] = set()
     handler_owners: list[object] = [

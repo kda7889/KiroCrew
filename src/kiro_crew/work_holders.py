@@ -43,6 +43,8 @@ UNREADABLE = "unreadable"
 CALLBACK = "callback"
 REFUSAL_WRITE = "refusal_write"
 UPDATE_BUILD = "update_build"
+#: An installed app updating itself (``apps.auto_update.applying``).
+APP_UPDATE = "app_update"
 TASK_RUNNER = "task_runner"
 
 #: How many holders a payload or a sentence lists before ``+N more``.
