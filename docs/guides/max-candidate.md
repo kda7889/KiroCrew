@@ -5,8 +5,8 @@ has a webhook receiver and owner Settings controls. The credential-free boot is
 verified below; no MAX live delivery has been proved. Do not publish upstream
 before the live checks pass.
 
-The TLS correction below is prepared as a separate wheel. The owner's currently
-running instance still uses the former wheel: no active runtime was overwritten.
+The TLS correction below was installed offline into the idle isolated taskenv
+on2026-11-25. The owner trial is stopped; no active runtime was overwritten.
 
 ## Prepared trial on testserver
 
@@ -206,14 +206,25 @@ The wheel includes2599 existing frontend asset entries and the CA package data.
 Offline build exited0 (25.24s, peak RSS54568KiB). Targeted MAX/TLS tests:
 57passed,7warnings,13.75s,exit0. Default SSL contexts remain unchanged in the test.
 
-An attempt to prepare a second runtime with the pinned93 dependencies offline
+An earlier attempt to prepare a second runtime with the pinned93 dependencies offline
 stopped on missing cached `pillow==13.0.0`; no network reinstall or dependency
 fallback followed. `max-tls-test-env` is incomplete and is **not** the launcher's
-runtime. The established source taskenv's dependencies and running wheel were
-left untouched. Do not call the running candidate TLS-fixed yet.
+runtime. The established source taskenv's dependencies and running wheel
+were left untouched at that stage.
 
-To apply without touching the working gateway, the owner first stops **only the
-foreground trial** with Ctrl-C. The now-idle isolated runtime can then take the
+On November25 the listener on55476 and candidate CLI process were absent.
+The prepared TLS wheel was then reinstalled **only** into `max-source-test-env`
+offline with `--no-deps --reinstall-package kirocrew` (exit0,1.97s). No process
+was killed. Installed `max/client.py` and the CA matched both wheel and source
+byte-for-byte; the installed CA DER fingerprint matched the pin and loaded into
+a standard SSL context retaining hostname/chain checks. Package metadata remained
+0.14.0; `uv pip check` checked94 packages and exited0 with all compatible.
+These checks import no product/CLI code and access no vault. No receiver,
+engine, auth-mint or owner-only launcher was executed. The isolated runtime is
+updated, but a restarted owner instance and live `/help` are still unproved.
+
+For a future repeat, to apply without touching the working gateway, the owner
+first stops **only the foreground trial** with Ctrl-C. The now-idle runtime can take the
 prepared wheel offline, reusing its established dependencies:
 
 ```bash
