@@ -81,7 +81,6 @@ if TYPE_CHECKING:
         redact_credentials,
         redact_exfiltration_urls,
         resolve_bot_name,
-        resolve_channel_crew,
         run_config_write,
         safety_override,
         sel,
@@ -1071,10 +1070,72 @@ async def _bang_bot(
     if locked:
         await slack.post_message(channel, locked, reply_ts)
         return ""
+    from kiro_crew.slack import bot_chat
+
     parts = cmd_text.split(maxsplit=1)
     typed = parts[1].strip() if len(parts) > 1 else ""
+    # A thread joined to a Bot's own dashboard chat (``slack/bot_chat.py``) leaves it
+    # first on ``off`` or another Bot; the rest of this command then runs as in any
+    # Slack-born thread. Another Bot is resolved and checked before the leave, so a
+    # refused switch leaves the thread where it was.
+    joined = bot_chat.joined_bot_chat(_dashboard_state, reply_ts)
+    if joined is not None:
+        # The transport routes a joined thread under the Bot chat's dashboard key; the
+        # thread's own memory record, reset and per-thread session live on its Slack key.
+        session_key = canonical_key(reply_ts)
+    # A flat DM (``slack.dm_single_session``) is one conversation keyed by the channel, and
+    # a join links one message's ts: there the per-thread path runs the whole DM as the Bot.
+    # A ``!temporary`` or ``!incognito`` thread stays off the Bot's saved chat the same way.
+    plain = session_key == canonical_key(reply_ts) and not _is_slack_restricted(session_key)
+    chat_state = _dashboard_state if plain else None
+    if joined is not None and typed:
+        if typed.lower() != "off":
+            target = await asyncio.to_thread(resolve_bot_name, typed)
+            if target == joined.agent:
+                await slack.post_message(
+                    channel, f"🤖 This thread already talks to Bot *{joined.agent}*.", reply_ts
+                )
+                return ""
+            refused = await bot_chat.switch_refusal(
+                _dashboard_state,
+                target,
+                typed,
+                session_key,
+                channel,
+                reply_ts,
+                user_id,
+                leaving=True,
+            )
+            if refused:
+                await slack.post_message(channel, refused, reply_ts)
+                return ""
+        try:
+            await bot_chat.leave_bot_chat(_dashboard_state, reply_ts)
+        except Exception:
+            logger.warning(
+                "slack !bot: leaving %s's chat was not saved", joined.agent, exc_info=True
+            )
+            await slack.post_message(
+                channel,
+                f"❌ Could not save leaving Bot *{joined.agent}*'s chat. Try `!bot off` again.",
+                reply_ts,
+            )
+            return ""
+        sel().log_tool_invocation(
+            session_key=session_key,
+            source="slack",
+            tool_name="!bot",
+            tool_kind="command",
+            outcome="bot_chat_leave",
+            metadata={"agent": joined.agent, "user": user_id, "channel": channel},
+        )
+        await slack.post_message(
+            channel, f"👋 This thread left Bot *{joined.agent}*'s chat.", reply_ts
+        )
     if not typed:
         current = _thread_agents.get(session_key, "")
+        if joined is not None:
+            current = joined.agent
         on_bot = bool(current) and current in await asyncio.to_thread(crew_bots)
         head = f"This thread runs as Bot *{current}*.\n" if on_bot else ""
         await slack.post_message(
@@ -1122,10 +1183,32 @@ async def _bang_bot(
             conversation_log,
         )
     key = await asyncio.to_thread(resolve_bot_name, typed)
-    if key is None or await asyncio.to_thread(resolve_channel_crew, key) is None:
+    refused = await bot_chat.switch_refusal(
+        chat_state, key, typed, session_key, channel, reply_ts, user_id
+    )
+    if refused or key is None:
+        await slack.post_message(channel, refused, reply_ts)
+        return ""
+    # The Bot's own chat open on the dashboard takes the thread, as Discord's ``!bot``
+    # does: its turns and the workers they start show in that chat, and its replies
+    # come back here. With none open the thread runs as the Bot on its own session.
+    slot, refusal = await bot_chat.join_bot_chat(chat_state, key, channel, reply_ts)
+    if refusal:
+        await slack.post_message(channel, f"❌ {refusal}", reply_ts)
+        return ""
+    if slot is not None:
+        sel().log_tool_invocation(
+            session_key=session_key,
+            source="slack",
+            tool_name="!bot",
+            tool_kind="command",
+            outcome="bot_chat_join",
+            metadata={"agent": key, "user": user_id, "channel": channel, "slot": slot.key},
+        )
         await slack.post_message(
             channel,
-            f"❌ Unknown Bot `{typed}`. Crew Bots: {await asyncio.to_thread(bots_text)}",
+            f"🤖 This thread now talks to Bot *{key}* in its own chat, so it shows on the"
+            " dashboard's Bots page too. `!bot off` to leave.",
             reply_ts,
         )
         return ""
