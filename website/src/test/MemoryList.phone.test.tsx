@@ -50,16 +50,16 @@ describe('the memory toolbar', () => {
     expect(toolbar).toHaveClass('flex-wrap')
     // A width class would stop wrapping from 640 px, inside the phone layout.
     expect(toolbar.className).not.toMatch(/sm:flex-nowrap/)
-    expect(within(toolbar).getByRole('textbox', { name: 'Search memory' }).closest('label')).toHaveClass('basis-full')
+    expect(within(toolbar).getByRole('textbox', { name: 'Search memory' }).parentElement).toHaveClass('basis-full')
   })
 
-  it('keeps the search box at least 20rem wide on a wide screen', async () => {
+  it('keeps the search box at least 22rem wide on a wide screen', async () => {
     renderWithProviders(<List />)
     const toolbar = await screen.findByTestId('memory-toolbar')
-    expect(within(toolbar).getByRole('textbox', { name: 'Search memory' }).closest('label')).toHaveClass('min-w-[20rem]')
+    expect(within(toolbar).getByRole('textbox', { name: 'Search memory' }).parentElement).toHaveClass('min-w-[22rem]')
     // A short placeholder, so it fits beside the mode switch, Select and Test recall.
     expect(within(toolbar).getByRole('textbox', { name: 'Search memory' })).toHaveAttribute('placeholder', 'Search memories…')
-    expect(within(toolbar).getByRole('textbox', { name: 'Search memory' }).closest('label')).not.toHaveClass('basis-full')
+    expect(within(toolbar).getByRole('textbox', { name: 'Search memory' }).parentElement).not.toHaveClass('basis-full')
   })
 })
 
