@@ -4,17 +4,15 @@
 
 **Installation is blocked on capacity. Do not rerun the install command below.**
 The owner's helper refused before stopping the service or installing anything.
-The read-only diagnostic command is:
-
-```bash
-sudo /usr/bin/python3 -I /home/adminuser/.kiro/crew/workspace-member-codex-dev/kirocrew-max-source/scripts/max_main_owner_install.py --space-report
-```
-
-This mode checks the same native-owner/sandbox/terminal guards, counts file
+The existing `--space-report` mode checks the native-owner/sandbox/terminal guards, counts file
 metadata and prints byte totals. It creates no backup, lock or log, reads no
 file contents and makes no service or network call. It must run in the owner's
 ordinary host terminal: the agent's masked filesystem cannot measure full host
 state. Active files may change; deployment rechecks after stopping the service.
+Another owner diagnostic is not the next action: it does not resolve capacity.
+The practical recommendation is to add32GiB of available root capacity through
+the host's normal storage-management procedure, preserving existing data. No
+resize, purchase or cleanup has been executed or authorized by this review.
 
 ### Capacity and retention
 
@@ -67,6 +65,60 @@ shortfall with some margin; this is not an exact resize command or approval to
 change LVM/partitions. No approved attached backup volume or supported storage
 resize entrypoint has been established. Keep the install blocked until capacity
 is actually available; do not weaken the guard or retry it unchanged.
+
+### Read-only allocation review
+
+Fresh root `df` reports116174385152 bytes used (108.20GiB),7528615936 bytes
+available (7.01GiB),94% usage. This is actual filesystem accounting, not the
+physical disk's nominal capacity. Directory measurements below report allocated
+blocks without opening regular-file contents. Permission failures were retained;
+there was no escalation or alternate route into denied directories.
+
+| Path | Allocated GiB | Disposition |
+|---|---:|---|
+| `/usr` | 4.60 | Installed system files; retain. |
+| `/opt` | at least2.05 | Includes DaSens/Synology; restricted subtrees make this partial. |
+| `/srv` | 5.60 | Project/service files; retain. |
+| `/var` | at least2.05 | Partial: several directories deny access. |
+| `/tmp` | at least0.04 | Partial; no useful17GiB candidate identified. |
+| `/swap.img` | 8.00 | Allocated swap; retain. |
+| `/home/adminuser/.arduino15/staging/packages` | 3.09 | Download staging, distinct from installed packages. |
+| `/home/adminuser/.arduino15/packages` | 5.37 | Installed SDK/toolchains; retain. |
+| `/home/adminuser/.cache/uv` | 1.61 | Cache; do not remove offline installation inputs blindly. |
+| `/home/adminuser/.cache/pip` | 0.17 | Download cache. |
+| `/home/adminuser/.npm/_cacache` | 0.48 | Download cache; future builds may need network. |
+| `/var/log/journal` | 1.59 | Active and archived journals; not all safely reclaimable. |
+| `/home/adminuser/.cache/books-transfer` | 2.06 | No proof of a disposable duplicate; retain. |
+
+The four download/staging caches total5.36GiB. Adding the own build/node_modules
+outputs from the earlier review gives6.52GiB of possible physical reclamation,
+before checking offline requirements or obtaining cleanup authorization. Those
+own outputs are inside the backup tree; deleting their1.16GiB would additionally
+reduce the two-copy guard by2.32GiB. Even granting all these optimistic savings,
+about8.25GiB of the estimated shortfall remains. No such cleanup was performed.
+Journal removal is neither proposed nor enough to close the remaining gap.
+
+The current main runtime is0.80GiB. The visible auxiliary venvs are named for
+DaSens/KiCad and are not proven obsolete. Other users' homes were not traversed.
+The root-owned `/var/lib/crew-reserve`, `/var/lib/docker`,
+`/var/lib/containerd`, private backup/restore directories and other ACL-protected
+locations cannot be measured under this profile. Do not infer their sizes from
+their names or classify them as expendable. A scoped journal disk-usage command
+only saw59.1MiB, while directory metadata saw1.59GiB: another visibility boundary,
+not evidence that system journals occupy only59.1MiB.
+
+Consequently, this review does not reconcile all108.20GiB or prove that no
+reclaimable host files exist. It establishes that the accessible, recognizable
+reproducible artifacts do not cover the deployment budget. Reclaiming an unknown
+private reserve is not an allowed workaround. The single recommended next action
+is a32GiB root-capacity increase, rather than a speculative cleanup. At unchanged
+usage that would leave about39GiB free against the estimated24.1GiB guard;
+filesystem overhead, reserved blocks and concurrent growth may reduce that margin.
+The actual post-change available bytes must satisfy the unchanged deployment
+guard. Storage management/provider and price have not been identified; no price
+or zero-downtime claim is made. The risk is a host disk/filesystem operation;
+use the host's normal owner-controlled storage procedure and recovery coverage.
+No partition/LVM command is invented, and MAX installation remains blocked.
 
 The parent confirmed the manager on2026-11-25 at21:45UTC: system scope,
 `/etc/systemd/system/kirocrew.service`, drop-in `primary.conf`,
