@@ -1,5 +1,11 @@
 # MAX candidate: source review, isolated install and live proof
 
+As of2026-11-25, the owner selects the existing main gateway on5477 as the
+deployment target. A separate trial and another Secret entry are no longer
+required. See [the main rollout review](max-main-rollout.md) for the current
+installed-state evidence, compatibility gap and promotion/rollback gates.
+The trial instructions below remain historical candidate preparation evidence.
+
 This is an isolated candidate procedure, not a production deployment. The source
 has a webhook receiver and owner Settings controls. The credential-free boot is
 verified below; no MAX live delivery has been proved. Do not publish upstream
