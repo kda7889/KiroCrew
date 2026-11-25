@@ -34,7 +34,13 @@ from kiro_crew.dashboard.chat_utils_injected_rows import (
     RESOURCE_WAKE_KIND,
 )
 from kiro_crew.dashboard.session_deliver import WAKE_GENERATION
-from kiro_crew.dashboard.slot_queue_repository import RESTORED_QUEUE_KEY, RESTORED_SEND_CHOSEN_KEY
+from kiro_crew.dashboard.slot_queue_repository import (
+    RESTORED_QUEUE_KEY,
+    RESTORED_SEND_CHOSEN_KEY,
+    SOURCE_CHANNELS_KEY,
+    source_channels_of,
+    stamp_source_channels,
+)
 
 if TYPE_CHECKING:
     from kiro_crew.dashboard.chat_runner import (
@@ -532,6 +538,11 @@ def _requeue_unconsumed_steers(state: "DashboardState", slot: "_ChatSlot") -> No
         if responsive_meta is not None:
             _meta.update(responsive_meta)
             _requeue_user_origin = True
+        # A channel hand-off's admission names the channels admission judges the
+        # text by (``channel_handoff``). They belong on the entry, not its meta,
+        # which the drain unions onto the row.
+        _source_channels = source_channels_of(_meta)
+        _meta.pop(SOURCE_CHANNELS_KEY, None)
         qid = slot.queue_insert(
             0,
             steer_msg,
@@ -540,6 +551,7 @@ def _requeue_unconsumed_steers(state: "DashboardState", slot: "_ChatSlot") -> No
             directive_channel_origin=_channel,
             directive_owner_origin=_owner and _requeue_user_origin,
         )
+        stamp_source_channels(slot, qid, _source_channels)
         if _wake is not None:
             # The turn this entry drains into carries the loop's wake, so its fault
             # is charged to that loop; not a durable queue key, so never persisted.

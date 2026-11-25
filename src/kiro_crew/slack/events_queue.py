@@ -632,8 +632,12 @@ async def _dispatch_queued(
         getattr(getattr(slack_cfg(orch), "messaging", None), "use_transport", False) is True
         and _activation != ACTIVATION_REVIEW
     )
-    # This entry's own files, never the ones of the message whose task queued it.
+    # This entry's own files, never the ones of the message whose task queued it,
+    # and no steer: it was queued, and that message's ts is not this entry's.
     set_linked_thread_files(kwargs.get("image_temp_paths") or [])
+    from kiro_crew.slack import midturn  # deferred: no name served through the facade
+
+    midturn.set_inbound(None)
     try:
         if _use_transport:
             await handle_message_transport(

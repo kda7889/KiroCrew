@@ -1069,6 +1069,7 @@ async def route_linked_thread(
             had_voice_input=had_voice_input,
         )
     text = _stored
+
     if admit is not None:
         # The caller's own live gate, asked after every await above (the agent
         # read, the window load, the image copy) and right before anything is
@@ -1124,6 +1125,42 @@ async def route_linked_thread(
     )
 
     note_channel_sender(_linked_slot, user_id)
+    # A typed message into an available running slot steers by default.
+    # The hand-off owns its queue fallback; only a synchronous early decline
+    # reaches Slack's queue below, so a gated route never awaits a steer.
+    from kiro_crew import crew_pause
+    from kiro_crew.slack import midturn
+    from kiro_crew.slack.handler_runtime.access import slack_cfg
+
+    _inbound = midturn.take_inbound()
+    if turn_context is None and interpret_commands and not crew_pause.holds_slot(_linked_slot):
+        _steered = await midturn.steer_linked(
+            _dashboard_state,
+            _linked_slot,
+            text,
+            channel=channel,
+            slack=slack,
+            reply_ts=reply_ts,
+            cfg=slack_cfg(),
+            inbound=_inbound,
+            gated=admit is not None,
+            user_meta=user_meta,
+        )
+        if _steered == midturn.LINKED_REFUSED:
+            return LinkedRoute.REFUSED
+        if _steered == midturn.LINKED_DONE:
+            _dashboard_state.push_slots_update()  # type: ignore[attr-defined]
+            sel().log_tool_invocation(
+                session_key=session_key,
+                agent="kirocrew",
+                source="slack",
+                tool_name="linked_thread_intercept",
+                tool_kind="permission",
+                outcome="allowed",
+                metadata={"user_id": user_id, "slot": _linked_slot_key},
+            )
+            logger.info("Steered linked Slack message into dashboard slot %s", _linked_slot_key)
+            return LinkedRoute.ROUTED
     # Redact for UI display only — LLM receives original text so it can process
     # user intent fully (redaction strips URLs/creds that may be relevant
     # context). The LLM's own output is redacted before display.
@@ -1151,8 +1188,6 @@ async def route_linked_thread(
     _queued_text = text
     # Conductor mode "Pause all" holds this session: the message queues as it does
     # behind a running turn, and Resume all (or its own Continue) runs it.
-    from kiro_crew import crew_pause
-
     _starts = not _linked_slot.running and not crew_pause.holds_slot(_linked_slot)
     if turn_context:
         from kiro_crew.context import _neutralize_structural_markers

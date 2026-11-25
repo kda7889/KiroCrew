@@ -58,6 +58,8 @@ on/off` works when the `/kirocrew` command is turned off.
 | `!dashboard 2h` | Dashboard link with custom duration (max 20h) |
 | `!title <text>` | Set this thread's title (up to 80 characters) |
 | `!stop` | Force-halt the current agent turn in this thread. Bypasses the per-session semaphore and cancels the active task. See "Emergency Stop" below |
+| `!steer <msg>` | While a reply is running, fold `<msg>` into it now. See "Messages sent while a reply runs" below |
+| `!queue <msg>` | While a reply is running, answer `<msg>` after it finishes |
 
 ## Keyword Commands
 
@@ -138,6 +140,29 @@ escalated to a hard stop, and "Nothing running." when no turn was active.
 
 Authorization: owner and allowed users. Unauthorized callers get
 "⛔ Not authorized." and an audit log entry under `slack.stop_command`.
+
+## Messages sent while a reply runs
+
+A message you send while the agent is still replying is folded into that reply
+(a steer) by default, and gets a ↪ (`:arrow_right_hook:`) reaction. This holds
+in thread replies, DMs and threads linked to a dashboard chat. Put `!queue` in
+front of the message to have it answered after the reply finishes instead; it
+gets an ⏳ reaction. `!steer <msg>` forces a steer. Set `messaging.queue_mode`
+to `queue` to make queueing the default, as on Discord and Telegram. When the
+session is idle, both prefixes are dropped and the message just starts a turn.
+
+A message that cannot be steered is queued: it carries files
+or a voice memo, it comes from a shared user or a trusted bot, the backend has no
+steer, a `!stop` is still settling, or the reply ended just as the message
+arrived. A `!` command, a message with `!temporary` or `!incognito`, a keyword
+command (`status`, `sessions`, `spawn`, `cron`) and a message a hook answers are
+queued too, so they run as commands after the reply instead of reaching the
+agent as text. If a failed steer into the thread's own session may already have
+reached the backend, it is not sent again, and no ↪ reaction claims confirmed
+delivery. A lone `!queue` or `!steer` with no message is answered with a hint and
+runs nothing. In a linked dashboard thread, the hand-off queues a steer that
+does not land. If the slot can no longer take it during the hand-off or its
+queue is full, a refusal is posted in the thread and the message is not queued.
 
 ## Streaming
 
