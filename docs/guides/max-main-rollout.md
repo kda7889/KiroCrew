@@ -10,8 +10,9 @@ file contents and makes no service or network call. It must run in the owner's
 ordinary host terminal: the agent's masked filesystem cannot measure full host
 state. Active files may change; deployment rechecks after stopping the service.
 Another owner diagnostic is not the next action: it does not resolve capacity.
-The practical recommendation is to add32GiB of available root capacity through
-the host's normal storage-management procedure, preserving existing data. No
+The capacity target is32GiB of additional available root capacity, subject to
+the Proxmox storage constraint below; do not enlarge the current SSD2 image
+blindly. No
 resize, purchase or cleanup has been executed or authorized by this review.
 
 ### Capacity and retention
@@ -119,6 +120,47 @@ guard. Storage management/provider and price have not been identified; no price
 or zero-downtime claim is made. The risk is a host disk/filesystem operation;
 use the host's normal owner-controlled storage procedure and recovery coverage.
 No partition/LVM command is invented, and MAX installation remains blocked.
+
+### Host management and storage constraint
+
+The admitted infra runbook
+`/srv/projects/infra/dev_projects/crew-primary/capacity-and-abb.md`
+(verified2026-11-24) identifies testserver as Proxmox VM525
+`DaSens-DataServer`, node `Aprelprx`, on the factory's shared hardware.
+Its125GiB disk is onSSD2. This is a local factory VM, not an identified
+pay-as-you-go cloud volume. The matching machine inventory is
+`/srv/projects/infra/dev_projects/machines.md`. No management-panel URL or
+storage price was found in the bounded admitted documentation search.
+
+That runbook supersedes an unqualified root expansion recommendation:
+SSD2 had879.11GiB physical capacity against922.52GiB logical images/saved RAM.
+Its464.43GiB then available did not cover all promised virtual-disk growth.
+Adding32GiB to the image on that same pool increases the existing capacity
+debt. Do not treat the earlier guest-only recommendation as an approved resize.
+
+The documented preferred pool is `local-lvm`: the24November audit recorded
+348.79GiB capacity,10.0078GiB logical volumes, Data%1.83 and Metadata%0.53.
+Those are dated source facts, not a live pool check. The runbook prefers an
+additional100–128GiB disk for reproducible builds/caches and requires pool
+monitoring and separate ABB coverage for persistent data on a new disk.
+Attaching a disk alone would not satisfy the current helper's same-filesystem
+restore contract or increase root free space.
+
+The concrete owner handoff is to the administrator of factory Proxmox
+`Aprelprx`: request a capacity-approved plan to move VM525's125GiB root image
+fromSSD2 to `local-lvm` and grow it to157GiB, preserving the guest filesystem
+and data. This is a proposal for administrator approval, not a documented or
+executed migration. With the dated inventory,157GiB plus the existing10.0078GiB
+logical volumes is167.01GiB, below348.79GiB pool capacity; current usage,
+snapshots, migration headroom and ABB recovery must be checked by that
+administrator. Do not remove the source image before recovery acceptance.
+Guest partition/LVM/filesystem expansion would follow the approved hypervisor
+operation, not an invented agent command. No live Proxmox API was called.
+
+Price and any factory allocation charge are unknown. No provider purchase is
+implied or performed. The administrator must supply any charge and expected
+service interruption before changes. Neither the root disk nor a pool was
+resized or migrated, no new disk was attached and no credential was read.
 
 The parent confirmed the manager on2026-11-25 at21:45UTC: system scope,
 `/etc/systemd/system/kirocrew.service`, drop-in `primary.conf`,
