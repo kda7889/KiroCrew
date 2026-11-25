@@ -243,9 +243,9 @@ suitable Python. The absence of a local-wheel argument in `kirocrew update`
 does not forbid this manual installation path. The earlier review was too
 restrictive in treating a signed release as the only possible deployment path.
 
-The installed `cli_parser_gateway.py:149-164` accepts `update [approve]` and
+The installed `cli_parser_gateway.py` accepts `update [approve]` and
 `--force` for a git update. It has no local-wheel argument.
-`platform/wheel_engine.py:1-35` requires a fresh sibling runtime, atomic promotion
+`platform/wheel_engine.py` requires a fresh sibling runtime, atomic promotion
 and a wheel digest authenticated by the pinned release-manifest signing key.
 `cli_server_update.py:_update_managed_venv` uses that release engine with memory
 readiness and snapshot hooks. These checks must remain in place.
