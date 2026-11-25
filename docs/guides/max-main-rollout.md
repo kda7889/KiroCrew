@@ -1,5 +1,89 @@
 # MAX on the existing main gateway: rollout review
 
+## Current owner-run step
+
+The parent confirmed the manager on2026-11-25 at21:45UTC: system scope,
+`/etc/systemd/system/kirocrew.service`, drop-in `primary.conf`,
+reported MainPID1466, launcher `crew-venv-current/bin/kirocrew gateway --no-open`.
+User scope is not installed. Do not repeat `service status`: its process-tree
+output was large, not evidence of thousands of errors.
+The helper additionally requires and checks `User=adminuser` before stopping.
+
+The prepared operation is:
+
+```bash
+sudo /usr/bin/python3 -I /home/adminuser/.kiro/crew/workspace-member-codex-dev/kirocrew-max-source/scripts/max_main_owner_install.py
+```
+
+Run only from an ordinary interactive owner terminal on testserver. The agent
+does not execute this helper, including any preflight or undo mode. Root is
+required for the existing **system** service and its private recovery files.
+The helper imports no product code, mints no credentials and changes no trust
+root, public bind, firewall, DNS or provider login.
+
+It performs one bounded deployment:
+
+1. Verify the host/root/terminal/sandbox guard, exact service launcher and
+   account, runtime link, package SHA256, baseline0.13.1 health/readiness and
+   free space. A pre-existing MAX drop-in is refused, not overwritten.
+2. Stop only the system `kirocrew.service`; require inactive/MainPID0, an empty
+   or removed service cgroup and no listener on5477 before touching code.
+3. As the owner, make opaque, uncompressed archives of **the entire existing
+   `/home/adminuser/.kiro/crew` and `/home/adminuser/.kiro/crew-venv-0.13.1`**.
+   This includes hidden files, conversation transcripts, stores, config, the
+   existing vault and other in-home state. This is owner-only local recovery,
+   not an agent vault read or transfer to another instance. Nothing is sent off
+   the server. `/var/backups/kirocrew-max/main-*` and its logs/manifests are
+   root-owned0700/0600; the agent must not read them.
+4. Compare both archives against the stopped source trees, preserve UID/GID,
+   modes, ACLs and xattrs, and record archive SHA256 values before installation.
+   Runtime Unix sockets are omitted by tar; no ordinary data file is excluded.
+   Nested mounts, unsupported special files and external symlinks in mutable
+   config/history/store/workspace/app/agent paths refuse the operation rather
+   than claim incomplete recovery coverage. Arbitrary external data is not a
+   recovery target.
+5. Install only the pinned kirocrew wheel as adminuser, offline with no
+   dependency changes, then require `pip check`. Set only MAX polling, its empty
+   owner allowlist and enabled flag through the normal CLI. Create only the new
+   root-owned `90-max-channel.conf` with the **reference**
+   `MAX_BOT_TOKEN=secret://bot_max_kda`; the Secret value is never printed.
+6. Reload systemd, start the existing system unit, and require both
+   `/api/health` version0.14.0 and `/api/ready` before reporting success.
+
+On an install/config/start/readiness failure, the helper stops that same unit
+again, verifies the archives and idle state, retains the failed data/runtime
+trees, restores both pre-migration archives, removes only its unchanged new
+drop-in, and starts the original0.13.1 service. A backup failure before any
+mutation merely restarts the untouched original service. A failed recovery
+keeps all archives and retained trees for the owner; it does not delete data.
+Every installer/archive child has its own process group. Timeout or interruption
+ends only that owned group before recovery. If the child cannot be reaped, the
+helper leaves the service stopped and retains the recovery point; it does not
+restore files while an installer could still be writing them.
+
+For a later manual rollback, the helper prints the exact command containing
+the private backup directory:
+
+```text
+sudo /usr/bin/python3 -I /home/adminuser/.kiro/crew/workspace-member-codex-dev/kirocrew-max-source/scripts/max_main_owner_install.py --undo /var/backups/kirocrew-max/main-<printed-name>
+```
+
+Undo refuses changed drop-ins, altered archives, insufficient recovery space or
+an already attempted recovery before replacing data. Current post-install data
+is retained in the private backup, rather than overwritten. A later rollback
+returns the earlier state; new work must be merged from that retained copy.
+
+The helper has synthetic tests for owner/sandbox guards, archive/restore of
+hidden files and symlinks, archive tampering, foreign units, changed drop-ins,
+non-clobbering undo, stop/backup/install failure ordering and successful ordering.
+No real service action, main-data backup, root mode or MAX receiver was run by
+the agent. Existing pairing behavior and its canonical BPMN are unchanged.
+
+After the owner operation succeeds, open the existing main Dashboard, choose
+Settings → Channels → MAX → Pair owner, send `/start <code>` privately to
+`@id2311384963_bot`, then `/help`. Package health/readiness does not prove that
+exchange or a confined model/tool turn, nor production webhook delivery.
+
 ## Reviewed compatible candidate
 
 The dependency blocker described below was reproduced and then fixed in source:
@@ -39,17 +123,11 @@ manager, so inventing `stop && install && restart` is incorrect. An explicit
 `stop --port5477` bypasses service handling and could let an auto-restarting unit
 race the install; it is not the deployment command either.
 
-The exact next owner command is read-only, in a normal adminuser terminal:
-
-```bash
-/home/adminuser/.local/bin/kirocrew service status
-```
-
-Its result establishes the actual manager/scope needed for the bounded stop,
-state backup and start steps. `debug_gateway` already returned owner-only
-`member_scope_denied`; no alternate process-inspection route was used to bypass
-it. Owner output must omit login links. Main health still returned200/version0.13.1
-after candidate verification. No main install, service, config or vault changed.
+The manager/scope question is closed by the parent's output above.
+`debug_gateway` already returned owner-only `member_scope_denied`; it is not
+retried. Use the root owner-run operation above, not a port-only stop or an
+unmanaged replacement. Main health returned200/version0.13.1 after candidate
+verification. No main install, service, config or vault was changed by the agent.
 
 ## Target and current evidence
 
@@ -71,7 +149,7 @@ Read-only checks during this review returned:
 - `uv pip check --python /home/adminuser/.kiro/crew-venv-0.13.1/bin/python`
   checked87 packages and reported incompatible `cryptography==50.0.2` against
   `cryptography>=42,<48`. This was already present; this review changed no
-  installed dependency. Candidate metadata has the same constraint. All its
+  installed dependency. The earlier candidate had the same constraint. All its
   other active core dependency requirements match the installed package inventory.
 - The scoped `debug_gateway` tool returned `member_scope_denied`: owner required.
   It was not retried through another identity or a process-inspection workaround.
@@ -116,9 +194,8 @@ signature, redirect the feed or modify the updater's trust root.
 ## Rollout gates
 
 1. Use the documented local-wheel installation path for this owner-requested
-   custom build, independently of the signed release updater. First resolve
-   the concrete dependency conflict below; the current wheel cannot preserve
-   the installed feature set with a valid dependency solution. A further
+   custom build, independently of the signed release updater. The compatible
+   `1a55ffb8` wheel supersedes the incompatible `dde97735` wheel. A further
    generic approval of the plan is not required.
 2. Keep the running0.13.1 tree unchanged. Prepare the new runtime beside it,
    preserving optional installed features and the existing launch/service
@@ -143,13 +220,11 @@ signature, redirect the feed or modify the updater's trust root.
 
 ## Rollback gate
 
-Retain `/home/adminuser/.kiro/crew-venv-0.13.1` and the previous managed launcher
-target. If a new MAX channel fails, disable it through the supported settings
-first. If a package rollback is needed, the deployment owner must restore the
-previous approved runtime through the deployment mechanism and restart it.
-Do not point an older runtime at a migrated data home until backward schema
-compatibility or an approved recovery has been established. No generic rollback
-command is supplied because that promotion/recovery route is not established.
+The root owner helper archives both the original runtime and entire data home
+before any package or config mutation. Its automatic recovery and printed
+`--undo` command restore them together, while retaining the failed/current trees.
+It never pairs old code with newer migrated data. The existing stable launcher
+link is not changed. No agent lifecycle action or real recovery has been run.
 
 ## Earlier dependency blocker (resolved above)
 
@@ -213,5 +288,6 @@ stop/install/restart command for this wheel now would cause either dependency
 breakage or an unprotected data migration; there is no safe owner installation
 command for these exact current bytes.
 
-The dependency correction and package gates are now recorded at the top of this
-document. The migration/backup and supervisor-lifecycle boundaries remain.
+The dependency correction, full-data recovery helper and package gates are now
+recorded at the top of this document. Execution remains an owner operation;
+neither its backups nor a successful real recovery is claimed from synthetic tests.
