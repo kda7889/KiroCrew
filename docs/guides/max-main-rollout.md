@@ -1,5 +1,56 @@
 # MAX on the existing main gateway: rollout review
 
+## Reviewed compatible candidate
+
+The dependency blocker described below was reproduced and then fixed in source:
+`cryptography>=42,<51` preserves the main install's50.0.2 and pyOpenSSL26.4.0.
+No main dependency was changed. An isolated testenv took cryptography50.0.2
+from official PyPI with normal TLS, after one offline cache miss.
+The web-push, WeCom media, Weixin media and MAX TLS suites passed151 tests
+(2 warnings,25.18s). These cover AES-GCM, CBC, EC signing and the MAX TLS context;
+they do not prove existing-data-home migration or live MAX delivery. The denied
+synthetic credentials probe was not repeated.
+
+New wheel, built offline from this source:
+`/home/adminuser/.kiro/crew/workspace-member-codex-dev/_only_local/max-main-compatible/kirocrew-0.14.0-py3-none-any.whl`
+
+SHA256: `1a55ffb83739890fbb514fc349b3049cef4044c9cd13ba7b0bc6cc4ed9054d62`.
+This supersedes the earlier `dde97735` wheel for main deployment only. The CA,
+endpoint and frontend inputs were not changed. An offline dry-run against the
+main interpreter, explicitly retaining pyOpenSSL26.4.0, resolved69 core packages
+and proposed changing **only kirocrew**, with no other dependency changes.
+After installing the new wheel only in the isolated testenv, `uv pip check`
+reported94 compatible packages. The testenv is not a replacement for the main
+runtime or its optional packages.
+
+The verified local package-install command, **only after the main gateway is
+stopped through its actual manager and a recovery point is secured**, is:
+
+```bash
+/home/adminuser/.local/bin/uv pip install --offline --no-deps --reinstall-package kirocrew --python /home/adminuser/.kiro/crew-venv-0.13.1/bin/python /home/adminuser/.kiro/crew/workspace-member-codex-dev/_only_local/max-main-compatible/kirocrew-0.14.0-py3-none-any.whl
+/home/adminuser/.local/bin/uv pip check --python /home/adminuser/.kiro/crew-venv-0.13.1/bin/python
+```
+
+These are not a complete live rollout command. Running them against a live
+install would overwrite code its gateway and children can still import.
+The current agent cannot stop/restart its supervisor. The installed lifecycle
+code also refuses to restart an installed-but-stopped service outside its
+manager, so inventing `stop && install && restart` is incorrect. An explicit
+`stop --port5477` bypasses service handling and could let an auto-restarting unit
+race the install; it is not the deployment command either.
+
+The exact next owner command is read-only, in a normal adminuser terminal:
+
+```bash
+/home/adminuser/.local/bin/kirocrew service status
+```
+
+Its result establishes the actual manager/scope needed for the bounded stop,
+state backup and start steps. `debug_gateway` already returned owner-only
+`member_scope_denied`; no alternate process-inspection route was used to bypass
+it. Owner output must omit login links. Main health still returned200/version0.13.1
+after candidate verification. No main install, service, config or vault changed.
+
 ## Target and current evidence
 
 The owner's2026-11-25 instruction selects the existing main gateway on5477.
@@ -42,6 +93,12 @@ metadata agreement does not prove that migration or a live MAX reply.
 
 ## Supported update boundary
 
+Local owner installation is supported independently of the signed updater:
+`docs/guides/install.md:443-450` documents `pip install dist/*.whl` with a
+suitable Python. The absence of a local-wheel argument in `kirocrew update`
+does not forbid this manual installation path. The earlier review was too
+restrictive in treating a signed release as the only possible deployment path.
+
 The installed `cli_parser_gateway.py:149-164` accepts `update [approve]` and
 `--force` for a git update. It has no local-wheel argument.
 `platform/wheel_engine.py:1-35` requires a fresh sibling runtime, atomic promotion
@@ -58,10 +115,11 @@ signature, redirect the feed or modify the updater's trust root.
 
 ## Rollout gates
 
-1. Have the deployment owner/reviewer accept the pinned local candidate and
-   establish its supported promotion route. If using the managed release route,
-   obtain a genuine signed release containing these bytes. Do not run an
-   unrelated feed update and assume it contains this unpushed MAX integration.
+1. Use the documented local-wheel installation path for this owner-requested
+   custom build, independently of the signed release updater. First resolve
+   the concrete dependency conflict below; the current wheel cannot preserve
+   the installed feature set with a valid dependency solution. A further
+   generic approval of the plan is not required.
 2. Keep the running0.13.1 tree unchanged. Prepare the new runtime beside it,
    preserving optional installed features and the existing launch/service
    contract. Correct the cryptography range in the new tree only. Require
@@ -93,11 +151,67 @@ Do not point an older runtime at a migrated data home until backward schema
 compatibility or an approved recovery has been established. No generic rollback
 command is supplied because that promotion/recovery route is not established.
 
-## Remaining block
+## Earlier dependency blocker (resolved above)
 
-The available scoped tools cannot promote this unpublished local wheel through
-the main install's signed-release updater. Owner-only diagnostics were refused.
-The next deployment decision is the reviewed promotion route for this exact
-candidate, including data migration and rollback. No additional Secret entry
-or trial is needed. Main files, services, launcher links and credentials have
-not been changed. Pair owner and a real `/help` reply remain unproved.
+The earlier `dde97735` wheel is dependency-incompatible with the installed feature set.
+This is not resolved by running the command as the owner. The owner's Secrets
+entry is already in the correct main vault. No additional Secret entry or trial
+is needed. Main files, services, launcher links and credentials have not been
+changed. Pair owner and a real `/help` reply remain unproved.
+
+## Completed local-install and rollback review
+
+Read-only package-metadata comparison found that the main install includes
+`pyOpenSSL==26.4.0`, requiring `cryptography>=49,<51`. The0.14.0 wheel requires
+`cryptography>=42,<48`. The ranges have no overlap. Downgrading cryptography to47
+would break the installed pyOpenSSL/WebRTC feature set; leaving50 installed
+would violate the candidate's declared dependency. The testenv cannot be used
+as a replacement: it lacks19 main packages, including aiortc, pyOpenSSL,
+pywhispercpp, boto3 and amazon-transcribe.
+
+This exact non-mutating command was run and exited1, with `No solution found`
+and the two incompatible cryptography ranges:
+
+```bash
+/home/adminuser/.local/bin/uv pip install --offline --dry-run --python /home/adminuser/.kiro/crew-venv-0.13.1/bin/python /home/adminuser/.kiro/crew/workspace-member-codex-dev/_only_local/max-trial-11249e86/tls-candidate/kirocrew-0.14.0-py3-none-any.whl pyOpenSSL==26.4.0
+```
+
+An earlier `--no-deps` dry run proposed replacing only kirocrew and cryptography.
+That is not a valid installation solution: `--no-deps` hides the pyOpenSSL
+conflict. Do not turn that dry run into a real install command.
+
+Static migration comparison against the actual installed package found1841
+added or changed Python files in this wheel, not just MAX:
+
+- `config/migration.py`, `taskq/migrate.py`, `memory_schema.py`,
+  `knowledge/store_parts/schema_migrations.py` and `secrets/migrate.py` are
+  byte-identical. This is evidence about those modules only.
+- `config/loader_writeback.py` adds a refusal before backing up an outside
+  pending settings edit; existing config migration backup/locking stays.
+- `config/loader_document.py` changes undeclared KAS preference handling and
+  drops retired config keys on locked base-document writes. Reverting Python
+  packages does not restore dropped settings.
+- `history_schema.py` adds the `project_picked` metadata field.
+- `channel_transcript_migration.py` adds merging/removal of drifted cron-chat
+  copies. Reverting Python packages cannot recreate removed transcript files.
+- `mate_config_migration.py` skips unsafe path-like identity rows.
+
+Therefore a code-only rollback is insufficient. The installed snapshot parser
+supports `snapshot --strict` and `restore <archive> --mode replace`, and refuses
+an incomplete strict backup with exit3. Its component list does not explicitly
+cover every transcript/identity migration path; a default snapshot must not be
+claimed as a complete recovery point without checking that coverage. Neither
+snapshot nor restore was run by the agent, and no vault/auth material was copied.
+
+The installed self-protection contract (`security/denied_rules_catalog.py`,
+comment before `self-protection-cron-adopt`, and `argv_floor_self.py` predicates
+`_is_self_restart`, `_is_self_update`) reserves supervisor update/restart actions
+from an agent shell. No alternate service, signal or interpreter route was used.
+After a dependency-compatible wheel and state recovery point exist, the owner
+must perform the normal lifecycle transition from a host terminal. Giving a
+stop/install/restart command for this wheel now would cause either dependency
+breakage or an unprotected data migration; there is no safe owner installation
+command for these exact current bytes.
+
+The dependency correction and package gates are now recorded at the top of this
+document. The migration/backup and supervisor-lifecycle boundaries remain.
