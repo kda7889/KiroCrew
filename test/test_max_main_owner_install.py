@@ -3,7 +3,9 @@
 import importlib.util
 import io
 import json
+import shutil
 import socket
+import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -320,7 +322,7 @@ def test_lost_status_log_never_prevents_required_rollback(prepared_apply, monkey
     monkeypatch.setattr(helper, "install_package", fail_install)
     with pytest.raises(ValueError, match="install failure"):
         helper.apply()
-    assert events == ["stop", "crew", "runtime", "rollback"]
+    assert events == ["preflight", "stop", "crew", "runtime", "rollback"]
 
 
 def test_only_scalar_systemd_properties_are_requested(helper, monkeypatch):
@@ -434,6 +436,79 @@ def test_install_keeps_dependencies_and_configures_only_max(helper, monkeypatch)
     ]
 
 
+def test_child_uses_safe_owner_cwd(helper, monkeypatch):
+    class Child:
+        def wait(self, timeout):
+            return 0
+
+    def start(args, **kwargs):
+        assert kwargs["cwd"] == str(helper.HOME)
+        return Child()
+
+    monkeypatch.setattr(helper.subprocess, "Popen", start)
+    helper.run(["synthetic"])
+
+
+def test_preflight_and_install_share_exact_uv_command(helper):
+    actual = helper.package_install_args()
+    dry = helper.package_install_args(dry_run=True)
+    assert dry == actual + ["--dry-run"]
+    assert actual[:4] == ["/usr/sbin/runuser", "-u", "adminuser", "--"]
+    assert actual[4:8] == [str(helper.HOME / ".local/bin/uv"), "--no-config", "pip", "install"]
+    assert "--offline" in actual and "--no-deps" in actual
+
+
+def test_real_uv_dry_run_ignores_poisoned_caller_and_home_config(helper, monkeypatch, tmp_path):
+    uv = shutil.which("uv")
+    if uv is None:
+        pytest.skip("uv executable is required for this optional CLI regression")
+    caller = tmp_path / "caller"
+    home = tmp_path / "home"
+    caller.mkdir()
+    home.mkdir()
+    for directory in (caller, home):
+        (directory / "uv.toml").write_text("synthetic invalid TOML [")
+    requirements = tmp_path / "empty-requirements.txt"
+    requirements.write_text("")
+    args = [
+        "pip",
+        "install",
+        "--dry-run",
+        "--offline",
+        "--no-deps",
+        "--cache-dir",
+        str(tmp_path / "cache"),
+        "--python",
+        sys.executable,
+        "--requirements",
+        str(requirements),
+    ]
+    env = {"PATH": "/usr/local/bin:/usr/bin:/bin", "LANG": "C.UTF-8"}
+    legacy = subprocess.run([uv] + args, cwd=caller, env=env, capture_output=True, timeout=15)
+    assert legacy.returncode == 2
+    assert b"uv.toml" in legacy.stderr
+    monkeypatch.setattr(helper, "HOME", home)
+    monkeypatch.chdir(caller)
+    with (tmp_path / "synthetic-output.log").open("wb") as output:
+        monkeypatch.setattr(helper, "LOG", output)
+        helper.run([uv, "--no-config"] + args)
+
+
+def test_failed_installer_preflight_never_stops_or_archives(prepared_apply, monkeypatch):
+    helper, events = prepared_apply
+
+    def fail_dry(args):
+        assert "--dry-run" in args
+        events.append("preflight")
+        raise helper.subprocess.CalledProcessError(2, args)
+
+    monkeypatch.setattr(helper, "run", fail_dry)
+    monkeypatch.setattr(helper, "install_package", lambda: pytest.fail("install before preflight"))
+    with pytest.raises(helper.subprocess.CalledProcessError):
+        helper.apply()
+    assert events == ["preflight"]
+
+
 def test_dropin_never_clobbers_an_existing_file(helper, monkeypatch, tmp_path):
     target = tmp_path / "max.conf"
     target.write_bytes(b"existing")
@@ -482,7 +557,9 @@ def prepared_apply(helper, monkeypatch, tmp_path):
     monkeypatch.setattr(helper, "require_idle", lambda: None)
     events = []
     monkeypatch.setattr(helper, "stop_service", lambda: events.append("stop"))
-    monkeypatch.setattr(helper, "run", lambda args: events.append(args[-2]))
+    monkeypatch.setattr(
+        helper, "run", lambda args: events.append("preflight" if "--dry-run" in args else args[-2])
+    )
 
     def archive(root, output):
         events.append(root.name)
@@ -515,7 +592,7 @@ def test_failed_backup_restarts_old_service_without_mutation(prepared_apply, mon
     monkeypatch.setattr(helper, "install_package", lambda: pytest.fail("install without backup"))
     with pytest.raises(ValueError, match="backup failure"):
         helper.apply()
-    assert events == ["stop", "start"]
+    assert events == ["preflight", "stop", "start"]
 
 
 def test_failed_install_rolls_back_after_both_archives(prepared_apply, monkeypatch):
@@ -528,7 +605,7 @@ def test_failed_install_rolls_back_after_both_archives(prepared_apply, monkeypat
     monkeypatch.setattr(helper, "install_package", fail)
     with pytest.raises(ValueError, match="install failure"):
         helper.apply()
-    assert events == ["stop", "crew", "runtime", "install", "rollback"]
+    assert events == ["preflight", "stop", "crew", "runtime", "install", "rollback"]
 
 
 def test_success_backs_up_before_install_and_starts_once(prepared_apply, monkeypatch):
@@ -536,7 +613,16 @@ def test_success_backs_up_before_install_and_starts_once(prepared_apply, monkeyp
     monkeypatch.setattr(helper, "install_package", lambda: events.append("install"))
     monkeypatch.setattr(helper, "write_dropin", lambda: events.append("dropin"))
     helper.apply()
-    assert events == ["stop", "crew", "runtime", "install", "dropin", helper.SYSTEMCTL, "start"]
+    assert events == [
+        "preflight",
+        "stop",
+        "crew",
+        "runtime",
+        "install",
+        "dropin",
+        helper.SYSTEMCTL,
+        "start",
+    ]
 
 
 def test_timeout_kills_only_the_helpers_own_process_group(helper, monkeypatch):
@@ -575,7 +661,7 @@ def test_unreaped_child_blocks_recovery(prepared_apply, monkeypatch):
     monkeypatch.setattr(helper, "install_package", fail)
     with pytest.raises(helper.ChildStillRunning):
         helper.apply()
-    assert events == ["stop", "crew", "runtime", "install"]
+    assert events == ["preflight", "stop", "crew", "runtime", "install"]
 
 
 def test_unreaped_child_raises_a_distinct_recovery_refusal(helper, monkeypatch):

@@ -225,6 +225,7 @@ def run(args):
         stdout=LOG,
         stderr=LOG,
         env={"PATH": "/usr/local/bin:/usr/bin:/bin", "LANG": "C.UTF-8"},
+        cwd=str(HOME),
         start_new_session=True,
     )
     try:
@@ -428,13 +429,12 @@ def remove_dropin():
         DROPIN.unlink()
 
 
-def install_package():
-    verify_digest(WHEEL, WHEEL_SHA)
-    owner = ["/usr/sbin/runuser", "-u", "adminuser", "--"]
-    run(
-        owner
+def package_install_args(*, dry_run=False):
+    return (
+        ["/usr/sbin/runuser", "-u", "adminuser", "--"]
         + [
             str(HOME / ".local/bin/uv"),
+            "--no-config",
             "pip",
             "install",
             "--offline",
@@ -445,10 +445,24 @@ def install_package():
             str(RUNTIME / "bin/python"),
             str(WHEEL),
         ]
+        + (["--dry-run"] if dry_run else [])
     )
+
+
+def install_package():
+    verify_digest(WHEEL, WHEEL_SHA)
+    owner = ["/usr/sbin/runuser", "-u", "adminuser", "--"]
+    run(package_install_args())
     run(
         owner
-        + [str(HOME / ".local/bin/uv"), "pip", "check", "--python", str(RUNTIME / "bin/python")]
+        + [
+            str(HOME / ".local/bin/uv"),
+            "--no-config",
+            "pip",
+            "check",
+            "--python",
+            str(RUNTIME / "bin/python"),
+        ]
     )
     for key, value in (
         ("max.delivery_mode", "polling"),
@@ -544,6 +558,8 @@ def apply():
         stopped = False
         mutated = False
         try:
+            status_event("stage", stage="installer_preflight")
+            run(package_install_args(dry_run=True))
             status_event("stage", stage="stop_service")
             stop_service()
             stopped = True

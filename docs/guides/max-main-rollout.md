@@ -10,8 +10,25 @@ sudo /usr/bin/python3 -I /home/adminuser/.kiro/crew/workspace-member-codex-dev/k
 ```
 
 Do not pipe it into `tee`: the stdout TTY guard is required. The agent does
-not execute the helper. The last observed main process was still0.13.1;
-neither a successful owner deployment nor a rollback has been established.
+not execute the helper. The owner run whose readable log identifies
+`/var/backups/kirocrew-max/main-axn4fdqi/operations.log` completed the verified
+archives, then failed at the first package-install child with exit2. The readable
+status recorded `recovery_complete` at `rollback_ready`; fresh main health
+reported0.13.1 and readiness true. The recovery copies are retained, not deleted.
+Successful MAX installation and live delivery remain unproved.
+
+The owner extracted the precise child error: uv could not open the caller's
+root-directory `uv.toml`, with permission denied/error13. `runuser -u` retains
+the caller's working directory. Every helper child now runs from the existing
+`/home/adminuser`; uv install and check also use the documented `--no-config`
+flag. Neither the root configuration file nor its ACL is read or changed by
+the agent. The same offline/no-deps installation command is used first with
+`--dry-run`, as adminuser with the same environment and cwd, before stopping
+the system service or creating archives. Its raw output stays in the new private
+operations log; the bounded readable log reports `installer_preflight` and
+numeric returncode. A failed dry-run requires no service recovery because no
+stop occurred. This plan does not replace the native space check or assert
+that a dry-run proves the subsequent install/migration/live MAX exchange.
 Native state/space/service/backup guards run again before mutation. Historical
 capacity observations and the Proxmox proposal below are not new instructions
 to resize, clean up or bypass the current guard.
@@ -232,7 +249,9 @@ It performs one bounded deployment:
 
 1. Verify the host/root/terminal/sandbox guard, exact service launcher and
    account, runtime link, package SHA256, baseline0.13.1 health/readiness and
-   free space. A pre-existing MAX drop-in is refused, not overwritten.
+   free space. A pre-existing MAX drop-in is refused, not overwritten. Run the
+   exact installer in dry-run mode with a fixed cwd and uv config discovery
+   disabled; any failure stops here before the service is touched.
 2. Stop only the system `kirocrew.service`; require inactive/MainPID0, an empty
    or removed service cgroup and no listener on5477 before touching code.
 3. As the owner, make opaque, uncompressed archives of **the entire existing
