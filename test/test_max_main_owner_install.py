@@ -84,6 +84,105 @@ def test_archive_covers_hidden_files_and_keeps_symlinks(helper, tmp_path, monkey
     assert (saved / ".hidden").read_bytes() == b"new state"
 
 
+def test_scoped_state_recovery_preserves_projects_and_retains_new_state(helper, tmp_path):
+    state = tmp_path / "crew"
+    state.mkdir()
+    for name in ("sessions", "memory_stores", "workspace/memory", "workspace/knowledge"):
+        directory = state / name
+        directory.mkdir(parents=True)
+        (directory / "synthetic-data").write_bytes(b"before")
+    (state / "config.json").write_bytes(b"before-config")
+    (state / ".synthetic-vault").write_bytes(b"before-vault")
+    for name in ("workspace-member-codex-dev", "models", "engines", "cache", "scratch"):
+        directory = state / name
+        directory.mkdir()
+        (directory / "canary").write_bytes(b"project-current")
+    archives = tmp_path / "archives"
+    archives.mkdir()
+    captured = helper.capture_state_scope(state, archives)
+    assert set(captured) == {
+        "config.json",
+        ".synthetic-vault",
+        "sessions",
+        "memory_stores",
+        "workspace",
+    }
+    external_roots = [tmp_path / name for name in ("mates", "agents", "runtime")]
+    for directory in external_roots:
+        directory.mkdir()
+        (directory / "synthetic-data").write_bytes(b"before")
+        helper.archive_tree(directory, archives / (directory.name + ".tar"))
+        (directory / "synthetic-data").write_bytes(b"after")
+    (state / "config.json").write_bytes(b"migrated-config")
+    (state / ".synthetic-vault").write_bytes(b"migrated-vault")
+    (state / "sessions/synthetic-data").write_bytes(b"migrated-session")
+    (state / "new-migration-marker").write_bytes(b"new-state")
+    (state / "workspace-member-codex-dev/canary").write_bytes(b"new-project-work")
+    retained = tmp_path / "retained"
+    helper.restore_state_scope(state, captured, retained)
+    for directory in external_roots:
+        helper.restore_tree(
+            directory,
+            archives / (directory.name + ".tar"),
+            tmp_path / ("failed-" + directory.name),
+        )
+        assert (directory / "synthetic-data").read_bytes() == b"before"
+        assert (tmp_path / ("failed-" + directory.name) / "synthetic-data").read_bytes() == b"after"
+    assert (state / "config.json").read_bytes() == b"before-config"
+    assert (state / ".synthetic-vault").read_bytes() == b"before-vault"
+    assert (state / "sessions/synthetic-data").read_bytes() == b"before"
+    assert (state / "workspace/memory/synthetic-data").read_bytes() == b"before"
+    assert (state / "workspace/knowledge/synthetic-data").read_bytes() == b"before"
+    assert (state / "workspace-member-codex-dev/canary").read_bytes() == b"new-project-work"
+    assert (state / "models/canary").read_bytes() == b"project-current"
+    assert not (state / "new-migration-marker").exists()
+    assert (retained / "new-migration-marker").read_bytes() == b"new-state"
+    assert (retained / "config.json").read_bytes() == b"migrated-config"
+
+
+def test_scoped_restore_rejects_tamper_before_moving_state(helper, tmp_path):
+    state = tmp_path / "crew"
+    state.mkdir()
+    (state / "config.json").write_bytes(b"original")
+    archives = tmp_path / "archives"
+    archives.mkdir()
+    captured = helper.capture_state_scope(state, archives)
+    archive, digest = captured["config.json"]
+    archive.write_bytes(b"tampered")
+    retained = tmp_path / "retained"
+    with pytest.raises(ValueError, match="digest"):
+        helper.restore_state_scope(state, captured, retained)
+    assert not retained.exists()
+    assert (state / "config.json").read_bytes() == b"original"
+
+
+def test_scope_refuses_external_state_links_and_project_restore_entries(helper, tmp_path):
+    state = tmp_path / "crew"
+    state.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (state / "memory_stores").symlink_to(outside, target_is_directory=True)
+    archives = tmp_path / "archives"
+    archives.mkdir()
+    with pytest.raises(ValueError, match="linked"):
+        helper.capture_state_scope(state, archives)
+    (state / "memory_stores").unlink()
+    for name in (
+        "",
+        ".",
+        "..",
+        "../outside",
+        "bad\x00name",
+        "workspace-member-codex-dev",
+        "models",
+    ):
+        with pytest.raises(ValueError, match="unsafe"):
+            helper.restore_state_scope(
+                state, {name: (archives / "unused", "unused")}, tmp_path / "retained"
+            )
+    assert not (tmp_path / "retained").exists()
+
+
 def test_restore_never_overwrites_retained_failed_state(helper, tmp_path):
     home = tmp_path / "crew"
     home.mkdir()

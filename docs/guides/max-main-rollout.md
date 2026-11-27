@@ -1,6 +1,136 @@
-# MAX on the existing main gateway: rollout review
+# MAX on main: scoped recovery review
 
-## Current owner-run step
+## Proposed scope: parent review before any next owner run
+
+The full28GiB reservation was an engineering choice to copy the entire Crew
+home plus runtime twice, not a MAX requirement. That design unnecessarily
+included source checkouts, wheels, build outputs and downloaded models. It also
+missed the separately located mate specifications. Increasing the disk or
+deleting data is not the proposed next step. No live apply, cleanup or guard
+reduction is authorized by this review.
+
+The following is a bounded recovery envelope derived from source, not a claim
+that every file in it will migrate. Actual branches depend on private config,
+existing markers, database schema and pending restores. These were not opened
+to determine per-member state. A mathematically minimal list of triggered files
+cannot be asserted from this session's masked metadata.
+
+### Source write-set
+
+All STATE paths below are under `/home/adminuser/.kiro/crew`.
+Comparisons read only the installed0.13.1 Python source and candidate source.
+
+| Writer / change from installed0.13.1 | Potential persistent writes | Recovery coverage |
+|---|---|---|
+| `config/loader_document.py`, changed; config transforms otherwise identical | Locked base config edits remove retired keys and stamp metadata; MAX config set runs the CLI prologue too. | All STATE top-level config files, overlay, provenance, backup files and markers. |
+| `channel_transcript_migration.py`, changed; called by dashboard `_converge_channel_transcripts` | Merge session heads/metadata, retain or remove duplicate channel/cron transcripts. | Entire `sessions/`, including archive and sidecars, and session maps. |
+| `mate_config_migration.py`, changed | Config bindings, session metadata, mate specs, retired specs, `migrated.json`. | STATE plus the entire external `/home/adminuser/.kiro/mates`. |
+| `crewmate_prune_migration.py` and folder-label records, changed | Base/overlay agent entries, crew-team bindings, session metadata, migration markers. | All non-project STATE leaves; external agent definitions retained separately. |
+| `memory_stores.py`, changed; `memory_schema.py` identical | Member identity/schema completion, legacy pending restore, config publication; memory worker also rebuilds indexes. | Entire `memory_stores/`, root DBs/sidecars, default `workspace/` with memory and knowledge. |
+| `cron_service/identity.py` identical; `owner_grant.py` added | `crons.json`, `cron_owner_grants_migrated` and identity markers. | Non-project STATE roots, including all unknown/new state leaves. |
+| `dashboard/crew_mode_migration.py` identical but still invoked | `crew-mode-conductor.json`, crew bindings and transcript metadata. | STATE control documents and sessions. |
+| Secrets migration and task-queue migration source identical | If invoked/pending: `.env`, `.vault/` encrypted store/key and database state. Identical source does not prove that a store needs no write. | Opaque owner-only copy of all remaining STATE, including hidden leaves and SQLite sidecars. |
+| Agent materialization / app agent registration | Generated and custom agent definitions in `/home/adminuser/.kiro/agents`. | External agents directory; no auth/provider directory is added. |
+| MAX adapter itself | Config `max` section/owner id; `max/cursor.json`, webhook `max/inbox.sqlite`, normal session transcripts. | STATE config, `max/` and sessions; a newly created `max/` is retained aside on rollback. |
+
+The native operation must still stop the exact existing system service and
+prove its cgroup/port idle before capturing databases or modifying packages.
+Other writers that share these selected files must be quiescent as well; a
+scoped backup is not permission to restore over active writers. No product
+migration or native service operation was run to prove this source envelope.
+
+### Concrete selection and preservation
+
+Capture all immediate STATE entries by default, including hidden and previously
+unknown files. Exclude only these top-level roots from copying **and restoring**:
+
+- `workspace-member-*`: project trees, including this checkout, testenv, wheels,
+  build outputs and `_only_local`. Existing and new project work stays in place.
+- `models`, `engines`, `cache`, `scratch`: downloaded/derived resources and
+  temporary runtime trees stay in place, even if a boot adds resources.
+  `embeddings_model.models_dir` identifies downloaded model assets; KAS bundles
+  are version-addressed under `engines/kas` in `acp/kas_bundle.py`.
+
+Do **not** exclude the default `workspace/`: it contains legacy memory and
+knowledge, not merely a disposable checkout. `snapshot_components.COMPONENTS`
+names `workspace/memory`, `workspace/knowledge` and `memory_stores`; the memory
+store resolver puts named member data under `memory_stores`, independently of
+their project working directories. Copying these as opaque owner data does not
+authorize the agent to read another member's memory.
+
+Also capture the existing runtime0.13.1 directory and both external
+`/home/adminuser/.kiro/mates` and `/home/adminuser/.kiro/agents`. The runtime is
+only0.745GiB in the visible logical-byte sample and retains the optional package
+set, entrypoints and interpreter links. A still smaller package-RECORD-only
+restore has not been verified, so unrelated dependency replacement is not used.
+Absent external roots must be recorded as absent; if boot creates them, retain
+those new trees aside rather than leave newer state with older code.
+
+Each selected STATE root is an independent tar/compare unit, with owner, ACL,
+xattr and intra-root hardlinks preserved by the existing tar primitive. A private
+manifest must record names, digests, selected-root presence/absence, external
+roots and the original STATE directory metadata. Validate every archive before
+moving anything. Move post-upgrade selected leaves into private retained storage;
+restore the old selected leaves and external roots/runtime together. Newly
+created selected leaves move aside even when no old archive exists. Do not
+rename/replace STATE itself: that would move the excluded project trees too.
+Keep all retained post-upgrade state and old backups. A later rollback therefore
+still needs a merge of new application records; project work is never rewound.
+
+The proof functions `state_rollback_paths`, `capture_state_scope` and
+`restore_state_scope` in the existing helper implement selected-leaf capture and
+non-clobbering recovery for synthetic tests. They reject archive digest changes,
+unsafe manifest names, linked selected roots and external linked state. They
+are **not wired into native apply/undo**: manifest persistence, root metadata,
+external-root presence/absence and legacy-full-backup dispatch must be integrated
+after parent review. The old native path still uses its full-state guard; do
+not execute it for this proposal or lower its guard independently. Native
+root ownership/ACL checks, TTY/sandbox guards and the uv preflight stay required.
+
+### Size evidence and recovery proof
+
+Metadata only, without opening config, memory, vault or other data contents:
+
+| Visible logical bytes | Amount |
+|---|---:|
+| Selected STATE | 543922293 |
+| Preserved project/resource trees | 9947754297 |
+| Full runtime | 799570460 |
+| External mates | 28905 |
+| External agents | 165875 |
+| Total selected visible data | 1343687533 (1.251GiB) |
+| Two-copy visible estimate plus512MiB headroom | 3.003GiB |
+
+These are the agent namespace's metadata totals, **not native coverage or a
+guard pass**. The previous owner sample contained13953493515 state bytes, with
+different timing and unmasked visibility. Subtracting the present passthrough
+sample and adding runtime/specs gives an indicative9.451GiB two-copy budget;
+that cross-time calculation is not an upper bound. Neither new storage nor
+cleanup is requested. The native operation must compute the same selected-set
+budget before stopping and again after quiescence. Preserve the reserve for a
+complete selected restore plus retained post-upgrade state; do not substitute
+compressed archive size for the restored allocation.
+
+The synthetic GNU tar/compare/restore test covers config, a synthetic vault,
+sessions, member stores, legacy memory/knowledge and external mates/agents/runtime.
+It proves that old selected bytes return, new migration markers and modified
+state remain in retained storage, and new project work/resource canaries stay
+untouched. Digest tampering is refused before any state move. This is filesystem
+recovery evidence on temporary data, not a native migration or service recovery
+acceptance for the new scope.
+
+### Candidate compatibility choice
+
+The existing wheel is a whole0.14.0 candidate. MAX changes touch core config
+schemas/loaders, channels, gateway state, owner pairing routes/access rules,
+sandbox state and built frontend assets. They are not a separately registered
+plugin wheel. A selective0.13.1 backport could be developed, but there is no
+built/tested compatible MAX-only package, and transplanting installed files is
+not the supported rollout. The current proposal uses the already verified
+candidate with narrowed state recovery, rather than claiming a plugin exists.
+No hot replacement, signed-updater bypass or new wheel build was performed.
+
+## Earlier full-state operation: audit reference, not the next command
 
 The owner has requested another native run with a readable diagnostic log.
 Use this existing command in an ordinary interactive terminal on testserver:

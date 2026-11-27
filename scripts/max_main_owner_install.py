@@ -41,6 +41,68 @@ STATUS = None
 STATUS_FORMAT = "max-main-status-v1"
 STATUS_LIMIT = 65536
 STATUS_EVENTS = 64
+STATE_PASSTHROUGH = frozenset({"models", "engines", "cache", "scratch"})
+
+
+def state_rollback_paths(root):
+    """Review-stage scope: retain project/resource trees in place, including new work."""
+    if root.is_symlink() or not root.is_dir():
+        raise ValueError("scoped state root must be a real directory")
+    return [
+        path
+        for path in sorted(root.iterdir())
+        if path.name not in STATE_PASSTHROUGH
+        and not path.name.startswith("workspace-member-")
+        and not stat.S_ISSOCK(path.lstat().st_mode)
+    ]
+
+
+def capture_state_scope(root, backup):
+    """Prepare scoped recovery proof; not wired into native apply before review."""
+    paths = state_rollback_paths(root)
+    for path in paths:
+        if path.is_symlink():
+            raise ValueError("linked scoped root needs an explicit recovery mapping")
+        if path.is_dir():
+            inspect_tree(path)
+            for base, dirs, files in os.walk(path, followlinks=False):
+                for name in dirs + files:
+                    child = Path(base) / name
+                    if child.is_symlink() and not child.resolve().is_relative_to(root.resolve()):
+                        raise ValueError("external scoped state is outside recovery coverage")
+        elif not path.is_file():
+            raise ValueError("unsupported scoped state file")
+    captured = {}
+    for index, path in enumerate(paths):
+        archive = backup / f"state-{index}.tar"
+        archive_tree(path, archive)
+        captured[path.name] = (archive, digest(archive))
+    return captured
+
+
+def restore_state_scope(root, captured, retained):
+    """Restore selected leaves while preserving all post-upgrade state by rename."""
+    if retained.exists() or retained.is_symlink():
+        raise FileExistsError("retained scoped state already exists")
+    current = {path.name: path for path in state_rollback_paths(root)}
+    for name, (archive, expected) in captured.items():
+        if (
+            not isinstance(name, str)
+            or not name
+            or "\x00" in name
+            or Path(name).name != name
+            or name in (".", "..")
+            or name in STATE_PASSTHROUGH
+            or name.startswith("workspace-member-")
+        ):
+            raise ValueError("unsafe scoped recovery entry")
+        verify_digest(archive, expected)
+    retained.mkdir(mode=0o700)
+    for name, path in current.items():
+        if name not in captured:
+            path.rename(retained / name)
+    for name, (archive, expected) in captured.items():
+        restore_tree(root / name, archive, retained / name)
 
 
 def open_status_directory():
@@ -375,6 +437,7 @@ def archive_tree(root, archive):
             "--numeric-owner",
             "--directory",
             str(root.parent),
+            "--",
             root.name,
         ]
     )
