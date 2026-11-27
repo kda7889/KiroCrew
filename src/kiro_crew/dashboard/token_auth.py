@@ -32,6 +32,7 @@ from kiro_crew.dashboard.agent_ipc import agent_socket_gate, request_on_agent_so
 from kiro_crew.dashboard.kiro_relay.admission import admit_relay_caller
 from kiro_crew.dashboard.kiro_relay.caller import published_relay_caller
 from kiro_crew.dashboard.origin import (
+    is_entry_request,
     is_https_request,
     is_loopback,
     is_proxied_request,
@@ -87,6 +88,7 @@ from kiro_crew.dashboard.token_auth_paths import (
     _exact_method_bypass,
     _is_spa_shell_request,
     _log_auth,
+    _log_query_token_refused,
 )
 from kiro_crew.dashboard.token_auth_tokens import (  # noqa: F401  # re-export through this facade
     APP_IAT_CLAIM,
@@ -132,6 +134,17 @@ def internal_path_matches(path: str, entries: Iterable[str]) -> bool:
 
 
 logger = logging.getLogger("kiro_crew.dashboard.token_auth")
+
+
+async def _strict_cookie_refusal(request: web.Request, path: str) -> web.Response | None:
+    """The owner gate for a cookie caller on a strict internal path, fail closed."""
+    from kiro_crew.dashboard.handlers._shared import require_owner_dashboard_request
+
+    try:
+        return await require_owner_dashboard_request(request, f"internal_auth {path}")
+    except Exception:  # no owner to compare against: refuse
+        logger.debug("strict-path owner check failed for %s", path, exc_info=True)
+        return _deny(request, "Forbidden")
 
 
 def token_auth_middleware(
@@ -202,10 +215,11 @@ def token_auth_middleware(
 
     async def _extract_and_validate_token(
         request: web.Request, _port: int
-    ) -> tuple[bool, str, str, str, str, bool]:
+    ) -> tuple[bool, str, str, str, str, bool, str]:
         """Extract token from query param or cookie and validate it.
 
-        Returns ``(valid, user_id, reason, app_name, token, from_query)``. Used by
+        Returns ``(valid, user_id, reason, app_name, token, from_query,
+        refused_query_reason)``. Used by
         internal-path browser/app auth (no secret header). The main auth flow
         has its own extraction with peer-binding and from_cookie tracking that
         this helper intentionally does not replicate — but its callers still
@@ -217,12 +231,17 @@ def token_auth_middleware(
         cookie adopted after a failed query token. It is the main flow's
         ``not from_cookie``, so a caller can publish the same
         ``auth_from_query_token`` mark from the credential actually validated.
+
+        ``refused_query_reason`` is the ``?token=`` refusal reason when a valid
+        cookie was adopted in its place, else empty. The helper does not log it:
+        it has no request's resolved peer, so the caller writes the row with
+        ``_audit_uid`` and names the same identity as its sibling rows.
         """
         cookie_name = f"mc_token_{_cookie_port_from_host(request, _port)}"
         query_token = request.query.get("token") or ""
         cookie_token = request.cookies.get(cookie_name, "")
         if not query_token and not cookie_token:
-            return False, "", "no token", "", "", False
+            return False, "", "no token", "", "", False, ""
         if query_token:
             valid, uid, reason, app = await validate_token_with_app_off_loop(
                 query_token, use_session_exp=True
@@ -244,11 +263,12 @@ def token_auth_middleware(
             # gate below. An expired app token must be refused as an expired
             # app token, so the caller re-exchanges its app secret.
             if valid or not cookie_token or claims_an_app_unverified(query_token):
-                return valid, uid, reason, app, query_token, True
+                return valid, uid, reason, app, query_token, True, ""
+        query_reason = reason if query_token else ""
         valid, uid, reason, app = await validate_token_with_app_off_loop(
             cookie_token, use_session_exp=True
         )
-        return valid, uid, reason, app, cookie_token, False
+        return valid, uid, reason, app, cookie_token, False, query_reason if valid else ""
 
     def _current_direct_gate() -> tailnet_direct_types.DirectGate | None:
         if tailnet_direct is None:
@@ -505,6 +525,10 @@ def token_auth_middleware(
             """The pin key this request must satisfy (RFC §3)."""
             if peer is not None and tailnet_trust is not None:
                 return peer_pin_key(peer, tailnet_trust.pin_scope)
+            if is_entry_request(request):
+                # Every connection on the entry port is the same-machine proxy, and a
+                # proxy that dials ``localhost`` uses either loopback address.
+                return "ip:127.0.0.1"
             return f"ip:{request.remote or 'unknown'}"
 
         def _check_pin(
@@ -588,6 +612,8 @@ def token_auth_middleware(
                         source="token_auth",
                         resources=f"{repin_key} (first-use re-pin)",
                     )
+            if ok and is_entry_request(request):
+                _state.mark_address_pin_proxied(token, request_peer_key)
             return ok, mismatch
 
         # Internal API paths: loopback + secret grants immediate access.
@@ -595,6 +621,9 @@ def token_auth_middleware(
         # normal cookie auth so dashboard pages can call these routes.
         _matches_strict = internal_path_matches(path, internal_paths)
         _matches_mixed = internal_path_matches(path, mixed_internal_paths)
+        # Kept across the reclassification below: a strict path's cookie caller
+        # is owner-gated whether or not ``local_only`` reads it as mixed.
+        _declared_strict = _matches_strict and not _matches_mixed
         # local_only=False: treat ALL internal paths as mixed (backward compat
         # with mainline's local_only semantics — user opted into remote access)
         if not local_only and _matches_strict and not _matches_mixed:
@@ -742,9 +771,17 @@ def token_auth_middleware(
             # at the decision point rather than deferring to downstream.
             # NOTE: uses _extract_and_validate_token helper (defined above)
             # for cookie/query-param validation.
-            _valid, _uid, _reason, _app, _tok, _from_query = await _extract_and_validate_token(
-                request, port
-            )
+            (
+                _valid,
+                _uid,
+                _reason,
+                _app,
+                _tok,
+                _from_query,
+                _refused_query,
+            ) = await _extract_and_validate_token(request, port)
+            if _refused_query:
+                _log_query_token_refused(request, _audit_uid(_uid), _refused_query)
             if not _valid:
                 _sel = _sel_fn()
                 _sel.log_api_access(
@@ -809,6 +846,14 @@ def token_auth_middleware(
                 )
             _log_auth(request, _audit_uid(_uid), "granted", f"cookie auth for {_uid}")
             await publish_actor(request, trust=tailnet_trust, serve_peer=peer)
+            if _declared_strict and not _app:
+                # A strict path is an agent tool's leg (it acts with the owner's
+                # messaging and session reach), so a cookie caller with no
+                # secret must be the owner or a teammate. Any other dashboard
+                # session is refused; an app token stays under its scope above.
+                _strict_denied = await _strict_cookie_refusal(request, path)
+                if _strict_denied is not None:
+                    return _strict_denied
             return await handler(request)  # type: ignore[operator]
         elif _matches_internal:
             if _matches_mixed:
@@ -848,9 +893,17 @@ def token_auth_middleware(
                         if not request.headers["X-Internal-Secret"]:
                             return _deny(request, "Forbidden", "internal_secret_missing")
                         return _deny(request, "Forbidden", "internal_auth_mismatch")
-                _valid, _uid, _reason, _app, _tok, _from_query = await _extract_and_validate_token(
-                    request, port
-                )
+                (
+                    _valid,
+                    _uid,
+                    _reason,
+                    _app,
+                    _tok,
+                    _from_query,
+                    _refused_query,
+                ) = await _extract_and_validate_token(request, port)
+                if _refused_query:
+                    _log_query_token_refused(request, _audit_uid(_uid), _refused_query)
                 if not _valid:
                     _sel = _sel_fn()
                     _sel.log_api_access(
@@ -912,6 +965,12 @@ def token_auth_middleware(
                     f"mixed non-loopback cookie auth for {_uid}",
                 )
                 await publish_actor(request, trust=tailnet_trust, serve_peer=peer)
+                if _declared_strict and not _app:
+                    # ``local_only=False`` read this strict path as mixed above; a
+                    # cookie caller still has to be the owner or a teammate.
+                    _strict_denied = await _strict_cookie_refusal(request, path)
+                    if _strict_denied is not None:
+                        return _strict_denied
                 return await handler(request)  # type: ignore[operator]
             else:
                 # INVARIANT: non-loopback access to strict internal paths is
@@ -1012,9 +1071,17 @@ def token_auth_middleware(
                 # The only place an app credential from local authorization is
                 # recognised. ``bearer`` is read on a Crew API path alone, so no
                 # other path ever carries one.
-                app_refusal = await crew_api_auth.refuse_app_credential(request, token)
-                if app_refusal is not None:
-                    return app_refusal
+                app_answer = await crew_api_auth.judge_app_credential(request, token)
+                if isinstance(app_answer, web.Response):
+                    return app_answer
+                if app_answer is not None:
+                    # Admitted by its route's row. The steps below judge a session,
+                    # and this caller holds none: the peer pin (the credential is
+                    # taken from this machine alone), the link exchange (no cookie
+                    # is minted) and the installed-app allowlist (the served list
+                    # decides, and this caller is no installed app).
+                    await publish_actor(request, trust=tailnet_trust, serve_peer=peer)
+                    return await handler(request)  # type: ignore[operator]
         else:
             valid, user_id, reason, app_name = await validate_token_with_app_off_loop(
                 token, use_session_exp=from_cookie
@@ -1050,6 +1117,7 @@ def token_auth_middleware(
                     _cookie_token, use_session_exp=True
                 )
                 if _c_valid:
+                    _log_query_token_refused(request, _audit_uid(_c_uid), reason)
                     token = _cookie_token
                     from_cookie = True
                     valid, user_id, reason, app_name = (
@@ -1523,10 +1591,14 @@ if TYPE_CHECKING:  # every owner-defined name in _EXPORTS, for type checkers and
         RESERVED_APP_PATH_SEGMENTS,
         _api_pattern_matches,
         _app_api_allowlist,
+        _app_grant_facts,
         _app_owns_path,
         _app_perms_cache,
         _app_perms_denied,
         _app_perms_lock,
+        _disabled_facts_locked,
+        _read_grant_facts,
+        _scope_refusal,
         app_token_path_allowed,
     )
     from kiro_crew.dashboard.token_auth_callers import (  # noqa: F401
@@ -1578,6 +1650,7 @@ if TYPE_CHECKING:  # every owner-defined name in _EXPORTS, for type checkers and
         _REVOKED_NONCES_FILE,
         CONNECTOR_AUDIENCE,
         CONNECTOR_CREDENTIAL_REASON,
+        LINK_TOKEN_MAX_CHARS,
         LINK_WINDOW_SECS,
         MAX_CONCURRENT_NONCES,
         RevokedNonceStore,
@@ -1624,6 +1697,12 @@ if TYPE_CHECKING:  # names it serves from outside the family, from their homes
     )
     from kiro_crew.atomic_write import (  # noqa: F401
         retry_read_sharing_window,
+    )
+    from kiro_crew.dashboard.app_scope_refusal import (  # noqa: F401
+        GrantFacts,
+        ScopeRefusal,
+        app_label,
+        scope_refusal,
     )
     from kiro_crew.dashboard.boot_id import (  # noqa: F401
         current_boot_id,

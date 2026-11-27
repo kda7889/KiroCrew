@@ -54,6 +54,10 @@ from dataclasses import dataclass
 
 from kiro_crew.agent_sdk.backend_identity import is_claude_backend_name
 from kiro_crew.agent_sdk.backends import (
+    ACP_BACKEND_KAS,
+    ACP_BACKEND_KIRO,
+    ACP_BACKEND_OPENCODE,
+    ACP_BACKEND_PI,
     ACP_BACKENDS_ACP_CLIENT_SPAWNABLE,
     ACP_BACKENDS_ADVERTISED_MODEL_SELECTION,
     ACP_BACKENDS_CREW_FIRES_SPEC_HOOKS,
@@ -65,6 +69,7 @@ from kiro_crew.agent_sdk.backends import (
     ACP_BACKENDS_KIRO_SLASH_COMMANDS,
     ACP_BACKENDS_NATIVE_TODOS,
     ACP_BACKENDS_NATIVE_WORKFLOWS,
+    ACP_BACKENDS_PERMISSION_REQUESTS_NAME_CHILD,
     ACP_BACKENDS_PLAN_CHECKLIST,
     ACP_BACKENDS_REMOTE_MCP_OAUTH,
     ACP_BACKENDS_TOOL_TITLE_REFINEMENT,
@@ -76,6 +81,17 @@ from kiro_crew.agent_sdk.provider_identity import PROVIDER_ACP, PROVIDER_CLAUDE_
 #: that has not declared another falls back to. Named so a consumer can ask
 #: "is this the native namespace?" without spelling the literal.
 MODEL_NAMESPACE_ACP = "acp"
+
+#: The namespace of claude-agent-acp's ids, the only one besides ``acp`` that the
+#: model registry carries ids for (``model_registry.json`` ``providers``).
+MODEL_NAMESPACE_CLAUDE_CODE = "claude_code"
+
+#: The backends whose transcripts the dashboard's Session Activity parse reads:
+#: kiro-cli's ``cli`` session directory and the KAS records. Read only to answer
+#: ``SessionCapabilities.writes_crew_readable_transcript``. shortcut: kept private
+#: here rather than as a registered ``ACP_BACKENDS_*`` set, because registering one
+#: edits ``agent_sdk/backends.py``; move it there once that file is free.
+_CREW_READABLE_TRANSCRIPT_BACKENDS = frozenset({ACP_BACKEND_KIRO, ACP_BACKEND_KAS})
 
 
 @dataclass(frozen=True)
@@ -253,6 +269,104 @@ class SessionCapabilities:
     #: failed call carries the bare tool name, a worse title than the first.
     refines_tool_call_titles: bool
 
+    #: Whether a permission request raised while a native sub-agent's card is open
+    #: is that sub-agent's, not the parent's own
+    #: (:data:`ACP_BACKENDS_PERMISSION_REQUESTS_NAME_CHILD`), so the dashboard's
+    #: native-crew auto-approve rung may answer it.
+    #:
+    #: True for kiro-cli and KAS. False everywhere else, an unknown backend
+    #: included: there the rung is skipped and the request takes the normal gate.
+    permission_requests_name_child: bool
+
+    #: Whether a session of this backend leaves a transcript the dashboard's
+    #: Session Activity parse reads: kiro-cli's ``cli`` session directory or the
+    #: KAS records (:data:`_CREW_READABLE_TRANSCRIPT_BACKENDS`). A backend that answers False
+    #: has its sessions counted from the per-turn usage rows instead, so a new
+    #: backend is counted rather than missed.
+    writes_crew_readable_transcript: bool
+
+    #: Whether a chat may switch steering files off one by one and have Crew's
+    #: steering load leave them out (:mod:`kiro_crew.steering_off`): the context
+    #: list offers the switch and the load honours it.
+    #:
+    #: True for claude, whose chats take their steering through Crew's load and
+    #: whose list offers the switch. False everywhere else, an unknown backend
+    #: included: there the list offers no switch and the load sends every file.
+    honors_chat_steering_off: bool
+
+    #: Whether a session of the default agent gets Kiro Crew's own persona prompt
+    #: in its ``[AGENT SYSTEM PROMPT]`` block, written for this harness (the
+    #: ``kiro-cli`` transport name respelled), because the harness loads no Crew
+    #: agent spec that would carry it.
+    #:
+    #: True for claude. False everywhere else, an unknown backend included: there
+    #: the default agent's block comes from its spec as before.
+    crew_sends_persona_prompt: bool
+
+    #: Whether the harness itself picks which conditional steering files
+    #: (``manual`` and ``fileMatch`` inclusion) a turn gets, so Crew's context
+    #: assembly leaves that choice to it. Read both by a live provider's
+    #: ``native_steering`` and, for a chat with no live provider yet, by the
+    #: dashboard's steering list, so the two answer alike.
+    #:
+    #: True for KAS. False everywhere else, an unknown backend included: there
+    #: Crew keeps those files reachable itself.
+    loads_steering_natively: bool
+
+    #: Whether a prompt the harness accepted stays in its native session even
+    #: when the turn never lands (a Stop after a real ``end_turn``, an
+    #: empty-response give-up): the Kiro "kept the prompt" contract. A merge
+    #: card sent in such a prompt counts as delivered, so it is not sent again.
+    #:
+    #: True for kiro-cli and KAS (which runs the Kiro CLI pick). False
+    #: everywhere else, an unknown backend included: there a card counts only
+    #: on a landed turn, so a wrong guess repeats it instead of losing it.
+    keeps_prompt_on_unlanded_turn: bool
+
+    #: Whether the harness answers a rejected permission request by ending a
+    #: clean ``end_turn`` on the refusal itself, leaving it unanswered, so a
+    #: sub-agent turn that ends that way is read as ending on the refusal.
+    #:
+    #: True for opencode, whose ``reject_once`` ends the turn. False everywhere
+    #: else, an unknown backend included: there the harness goes on after a
+    #: reject, and a clean ending is not read as one.
+    ends_turn_on_permission_reject: bool
+
+    #: Whether the harness names a Crew tool in its tool calls only by a fused
+    #: ``<server>_<tool>`` name, so a sub-agent's tool dispatch reads that name as
+    #: Crew's only for a server the session handed the harness.
+    #:
+    #: True for pi and claude. False everywhere else, an unknown backend
+    #: included: there no handed server list is read at dispatch.
+    names_crew_tools_by_fused_name: bool
+
+    #: Whether an Auto pick moves a live session to ``auto`` in place even when
+    #: the slot already holds ``auto``: the harness advertises no model list,
+    #: runs ``auto`` on a new session, and can come back on a concrete model (a
+    #: reopened chat, a start that inherits kiro-cli's ``chat.defaultModel``), so
+    #: the Auto pick is sent as a live ``set_model`` rather than a reset.
+    #:
+    #: True for KAS. False everywhere else, an unknown backend included: there
+    #: Auto goes live only when the backend advertised it, and a slot already on
+    #: ``auto`` keeps the same-value shortcut.
+    model_auto_switches_in_place: bool
+
+    #: Whether the harness loads the session's agent itself (its persona,
+    #: steering, skills and resources), so ``kirocrew chat`` sends the typed text
+    #: as it is instead of building Crew's session context into the first message.
+    #:
+    #: True for kiro-cli and KAS. False everywhere else, an unknown backend
+    #: included: there the CLI builds that context itself.
+    harness_loads_agent_context: bool
+
+    #: Whether the harness keeps the same native session across its ``/compact``
+    #: boundary, so Crew compacts in place: it waits for the turn permit, sends
+    #: ``/compact`` and leaves the durable session mapping untouched.
+    #:
+    #: True for claude. False everywhere else, an unknown backend included: there
+    #: the session takes the other compaction arms.
+    keeps_session_across_compaction: bool
+
 
 def capabilities_for(backend: str) -> SessionCapabilities:
     """The capabilities of *backend*, fail-closed for an id this build cannot name.
@@ -284,6 +398,17 @@ def capabilities_for(backend: str) -> SessionCapabilities:
         honors_remote_mcp_oauth=backend in ACP_BACKENDS_REMOTE_MCP_OAUTH,
         native_workflows=backend in ACP_BACKENDS_NATIVE_WORKFLOWS,
         refines_tool_call_titles=backend in ACP_BACKENDS_TOOL_TITLE_REFINEMENT,
+        permission_requests_name_child=backend in ACP_BACKENDS_PERMISSION_REQUESTS_NAME_CHILD,
+        writes_crew_readable_transcript=backend in _CREW_READABLE_TRANSCRIPT_BACKENDS,
+        honors_chat_steering_off=is_claude_backend_name(backend),
+        crew_sends_persona_prompt=is_claude_backend_name(backend),
+        loads_steering_natively=backend == ACP_BACKEND_KAS,
+        keeps_prompt_on_unlanded_turn=backend in (ACP_BACKEND_KIRO, ACP_BACKEND_KAS),
+        ends_turn_on_permission_reject=backend == ACP_BACKEND_OPENCODE,
+        names_crew_tools_by_fused_name=backend == ACP_BACKEND_PI or is_claude_backend_name(backend),
+        model_auto_switches_in_place=backend == ACP_BACKEND_KAS,
+        harness_loads_agent_context=backend in (ACP_BACKEND_KIRO, ACP_BACKEND_KAS),
+        keeps_session_across_compaction=is_claude_backend_name(backend),
     )
 
 
@@ -318,6 +443,17 @@ UNKNOWN_BACKEND_CAPABILITIES = SessionCapabilities(
     honors_remote_mcp_oauth=False,
     native_workflows=False,
     refines_tool_call_titles=False,
+    permission_requests_name_child=False,
+    writes_crew_readable_transcript=False,
+    honors_chat_steering_off=False,
+    crew_sends_persona_prompt=False,
+    loads_steering_natively=False,
+    keeps_prompt_on_unlanded_turn=False,
+    ends_turn_on_permission_reject=False,
+    names_crew_tools_by_fused_name=False,
+    model_auto_switches_in_place=False,
+    harness_loads_agent_context=False,
+    keeps_session_across_compaction=False,
 )
 
 
@@ -352,6 +488,7 @@ def capture_prompt_timeout(provider: object, deadline: float) -> float | None:
 
 __all__ = [
     "MODEL_NAMESPACE_ACP",
+    "MODEL_NAMESPACE_CLAUDE_CODE",
     "SessionCapabilities",
     "UNKNOWN_BACKEND_CAPABILITIES",
     "capabilities_for",

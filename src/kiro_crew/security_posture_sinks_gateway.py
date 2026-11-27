@@ -296,11 +296,11 @@ _GATEWAY_SINKS: tuple[tuple[str, str, str], ...] = (
         "fence-neutralized and capped, before it leaves the op route.",
     ),
     (
-        "Browser sign-in completion",
-        "browser_harness/sign_in.py",
-        "The page URL a provider's sign-in completion lands on, the only part of it the "
-        "agent sees, passes the exfiltration-URL and credential redactors before it is "
-        "returned or written to the step label.",
+        "Browser per-origin sign-in",
+        "browser_harness/sign_in_guard.py",
+        "A provider's sign-in outcome reaches the agent as the site's host, a fixed "
+        "reason code and a note; the provider's own message passes the exfiltration-URL "
+        "and credential redactors whole before it is cut to 200 printable characters.",
     ),
     (
         "Browser action change reports",
@@ -988,6 +988,37 @@ _GATEWAY_SINKS: tuple[tuple[str, str, str], ...] = (
         "Streamed and non-streamed completions served to third-party clients.",
     ),
     (
+        "Crew API responses",
+        "dashboard/crew_api_responses.py",
+        "The reply text and the failure reason of a POST /v1/responses turn, redacted "
+        "before the answer leaves. `metadata`, the model name and the names of ignored "
+        "fields go back as the caller sent them. The turn's record holds that answer, "
+        "with the same fields as sent, and each input text is redacted here before "
+        "it is written to the record.",
+    ),
+    (
+        "Crew API response read-back",
+        "dashboard/crew_api_response_reads.py",
+        "The reply text, the failure reason and the input texts of a kept POST "
+        "/v1/responses turn, served again by GET /v1/responses/{response_id} and its "
+        "input_items. Each is redacted again with the route's _redact on its way out; "
+        "a record file that is not the one shape the store writes is not served, and "
+        "in that shape every other field is a fixed value or one of the three sent "
+        "back as they are. No stream event is kept: a stream's events are made again "
+        "from the redacted answer, and from the kept text of its deltas only when "
+        "that redaction changes nothing in them, judged joined. `metadata`, the "
+        "model name and the names of ignored fields go back as the owner sent them.",
+    ),
+    (
+        "Crew API response stream",
+        "dashboard/crew_api_response_stream.py",
+        "The text deltas of a streamed POST /v1/responses turn pass through "
+        "StreamRedactor with the route's _redact before they leave. Its final text "
+        "is the concatenation of those deltas, including on failure. Held text is "
+        "redacted at the turn's end; oversized sensitive runs are replaced and their "
+        "continuations discarded. Approved links' token values are redacted too.",
+    ),
+    (
         "A conductor mode root's worker list and timeline",
         "dashboard/handlers/crew_workers.py",
         "The side panel's worker cards (a closed worker's saved title, the ledger "
@@ -1113,5 +1144,13 @@ _GATEWAY_SINKS: tuple[tuple[str, str, str], ...] = (
         "URLs too, before the name is cut to 64 characters; a host whose "
         "policy cannot be composed lists no name. The CLI repeats it on what "
         "it prints.",
+    ),
+    (
+        "A chat's history search results",
+        "dashboard/chat_history_search.py",
+        "The excerpt each search hit shows in the browser, cut from a transcript "
+        "row. The row's text passes both redactors (exfiltration URLs and "
+        "credentials) whole before URLs are shortened and the excerpt is cut, so "
+        "a credential inside a long URL never reaches the excerpt.",
     ),
 )

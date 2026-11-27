@@ -433,7 +433,9 @@ each replaced field with its old and new value (a WARNING line ending in
 | `ui.overlays[].id` | string | | Overlay id; must match a bundled overlay component (see below) |
 | `ui.overlays[].replaces` | string | | Host overlay slot this app takes over while enabled |
 | `ui.loading.layout` | string | `"page"` | Placeholder shape shown while the bundle loads: `"page"`, `"rail"`, `"centered"` or `"split"` (see below) |
+| `ui.loading.logo` | string | | Optional image drawn above the placeholder's label, a path relative to ui/ (see below) |
 | `ui.frameSources` | string[] | `[]` | Sites your pages may show in an `<iframe>`, at most 8. Each is an exact origin, `https://` plus one hostname: no path (not even `/`), port, query, user info or wildcard, and no IP address, `localhost` or public suffix such as `co.uk` or `github.io`. Install refuses anything else, and a repeated entry. The dashboard allows these origins in its `frame-src` only while your app is enabled and trusted, and only the ones the owner approved: install approves what it declares, and an origin a later update or edit adds waits for the owner on the app's page. The origins are allowed for the whole dashboard, not only your pages |
+| `ui.startup` | string | | A `.mjs` or `.js` module (relative to ui/) the dashboard mounts on every load once the owner approves it (see below) |
 | `contributes.sessionControls[].id` | string | | Control id, kebab-case; addressed as `<appName>:<id>` |
 | `contributes.sessionControls[].entryPoint` | string | | ESM bundle path for the control (relative to ui/) |
 | `contributes.sessionControls[].label` | string | | Accessible name, and the chip's tooltip |
@@ -468,6 +470,147 @@ name; you can't supply markup or styles. The match is exact: a missing or `null`
 `loading`, a non-object, a non-string `layout`, or an unknown name (including a
 different case, like `"Rail"`) all fall back to `"page"`. An invalid value is
 not an install error; it is dropped.
+
+You can also name an image, such as your app's logo, to show above the "Loading
+<app>…" label in every layout:
+
+```json
+{
+  "ui": {
+    "entry": "dist/index.mjs",
+    "loading": { "layout": "centered", "logo": "img/logo.svg" }
+  }
+}
+```
+
+The path is relative to your `ui/` directory and is served by the same route as
+your bundle, so use an image type that route serves (`.svg`, `.png`, `.jpg`,
+`.jpeg`, `.gif` or `.webp`). One image is shown in both themes, so pick one that
+reads on light and dark backgrounds. It is drawn in a fixed 48 px square with
+`alt=""`, since the label already names the app. The placeholder adds no
+animation to it, so use a still image. A path with `..`, a leading `/`, a `\` or
+a `:` (which rules out any URL) is dropped, like an invalid layout, and the
+placeholder shows no image. A file that does not load (missing, or a type the
+route does not serve) leaves its square empty, so the label does not move.
+Without `logo` the placeholder has no image, as before. A side-panel tab
+(`contributes.panelTabs[].entry`) shows the default shape and no logo.
+
+### `ui.startup` — Code That Runs While the Dashboard Is Open
+
+A page's code runs only while its page is open. An app that changes the whole
+dashboard, such as one that replaces the resting pointer, declares a startup
+module instead. The dashboard mounts its default export in every tab, on every
+route, from the moment the dashboard loads:
+
+```json
+{
+  "ui": {
+    "entry": "page.mjs",
+    "startup": "startup.mjs"
+  }
+}
+```
+
+```js
+// ui/startup.mjs
+import { useEffect } from 'react'
+
+export default function PointerPal() {
+  useEffect(() => {
+    const onMove = () => { /* ... */ }
+    window.addEventListener('pointermove', onMove)
+    return () => window.removeEventListener('pointermove', onMove)
+  }, [])
+  return null
+}
+```
+
+The component is mounted like a page: it gets the same SDK context (`useAppApi`)
+and its own error boundary, and a throw or a failed import is logged and shown
+once in a dismissible notice, without stopping the dashboard. Do the work in an
+effect and undo it in the effect's cleanup. The component unmounts, running that
+cleanup, as soon as a refreshed app list stops admitting it; work done when the
+module is first evaluated stays until the tab reloads.
+
+`GET /api/apps` reports each app's `startup` row as `admitted`, `needs-approval`
+or `denied`, with a reason, and only `admitted` mounts. An admitted row also carries
+`digest`. The dashboard loads `startup:<digest>/<entry>` under the app's `ui/` URL
+and remounts when the name, version or digest changes. Relative imports stay under
+that approval-bound prefix: an absent or different approval returns `409`, including
+after revocation, even for an unchanged file. Ordinary UI URLs retain their behavior.
+Absolute imports, `../` climbs out of the prefix and fetch-and-eval can leave this
+namespace; only already-approved code can do so without failing its hash.
+
+Because the startup graph loads from the `startup:<digest>/` URL and the page
+graph from the ordinary `ui/` URL, a module imported by both is evaluated twice
+and does not share module-scope state between them. A startup module that must
+share state with the app's page keeps that state on `globalThis` or the app SDK,
+not in a module-level variable.
+
+An app is admitted when
+all of these hold:
+
+- It is enabled and its execution ceiling is open (`agent.apps_allow_third_party`
+  or `agent.apps_trusted`).
+- All of its code runs in the browser. Every top-level `app.json` key must be one
+  of `name`, `version`, `displayName`, `description`, `author`, `license`,
+  `minKiroCrewVersion`, `signer`, `signature`, `tags`, `jobFamilies`, `platform`,
+  `permissions`, `notifications`, `config_keys`, `credentialMasks`, `l10n`,
+  `iconPath`, `iconPathDark`, `icon`, `links`, `repo`, `screenshots`,
+  `screenshotsDark`, `heroImage`, `heroImageDark`, `heroImageDetail`,
+  `heroImageDetailDark`, `highlights`, `useCases`, `configuration`, `ui`, `desktop`
+  and `contributes`.
+  `contributes` may hold every point except `fileMenuItems`, `ui.overlays` must be
+  empty, and the app must not manage its own resources. Any other key, including
+  one added to the manifest format later, is refused.
+- The owner approved its startup entry at its current version and code, from a
+  terminal:
+
+  ```bash
+  kirocrew app startup <name>            # approve
+  kirocrew app startup <name> --revoke   # withdraw
+  ```
+
+  The approve verb does not yet show what changed since the last approval.
+  The approval stores `{version, entry, digest, files}`. `files` maps every regular
+  file's relative POSIX path under `ui/` to its SHA-256, taking scripts from the
+  protected copy when `agent.apps_ui_protected_copy` is on (a missing copy refuses
+  approval), non-scripts from live `ui/`, and all files live when the flag is off or
+  the operator granted an out-of-install dev root; `digest` hashes the sorted paths
+  (each followed by a NUL) and their raw SHA-256 bytes. A new version, changed
+  entry or changed tree asks again before startup mounts, including dev-mode edits.
+  Approval is limited to 4,096 regular files (`startup_modules._MAX_UI_FILES`), counting
+  live non-script files plus served-root script files, not live scripts the gateway
+  does not serve. An oversized tree or stored map is refused. The app-list read
+  inventories the tree once, rejects added or deleted paths before reading file bytes,
+  and stops at the first changed or oversize file.
+  Each served UI file is checked against its own approved hash, whatever its type
+  (`.js`, `.mjs`, `.css`, `.json`, `.svg`, `.map`, images or fonts). The
+  gateway reads only the requested file and sends exactly the bytes it checked.
+  Verified responses omit `Last-Modified` and revalidate only by the approval-qualified
+  ETag; `If-None-Match: *` gets the full verified bytes, not a 304.
+  Files served without startup approval keep wildcard and date-based revalidation.
+  Changed, added or unavailable files, unreadable records, records without `files`,
+  and records whose digest disagrees with their map answer `409`, with `reason` and
+  `remedy` fields: run `kirocrew app startup <name>` to approve the current code, or
+  `kirocrew app startup <name> --revoke`. Unchanged approved files remain servable
+  even when another file changes. Revoke while developing in dev mode; it also works
+  after the manifest drops `ui.startup`. Editing the manifest alone never bypasses
+  serving checks. An owner install or update that drops `ui.startup` forgets the
+  record and reports that its UI files are now served without startup approval
+  checks, with an `app_startup_revoke` audit event. A failed operation restores the
+  record and reports no completed withdrawal. Uninstall also drops it. An entry that
+  is not a plain `.mjs` or `.js` path inside `ui/` is refused.
+  The record lives in `member-records/app-startup/<app>.json` beside the app's other
+  owner decisions, hidden by the agent sandbox in every mode. The approval command
+  refuses to run inside an agent's shell.
+- The request comes from the owner's dashboard. A page loaded with `?safe=1`
+  and an embedded instance pane mount none.
+
+A gateway older than this field drops it, so the app installs and works as a
+page-only app there; one that also requires signatures refuses a signed manifest
+carrying it, because the field is part of the signed payload. Set
+`minKiroCrewVersion` when the app depends on it.
 
 ### `ui.overlays` — Replacing a Host Overlay Surface
 
@@ -968,7 +1111,7 @@ No app code runs until a link on one of the provider's `hosts` is hovered.
 |-------|------|-------------|
 | `id` | string | Storage-safe slug, unique within the app |
 | `entry` | string | ESM module, relative to `ui/` (same base as `ui.entry`) |
-| `hosts` | string[] | 1-64 hostnames; a leading dot means the domain and every subdomain. Only `https:` links match. Stored lowercased, in IDNA (punycode) form and without a trailing dot. A public suffix (`co.uk`, `.github.io`) or a bare TLD (`com`) is refused |
+| `hosts` | string[] | At least one hostname, with no upper limit; a leading dot means the domain and every subdomain. Only `https:` links match. Stored lowercased, in IDNA (punycode) form and without a trailing dot. A public suffix (`co.uk`, `.github.io`) or a bare TLD (`com`) is refused |
 | `textPatterns` | object[] | Optional. Plain text in chat messages that also opens a card; see below |
 | `fullUrl` | boolean | Optional. `show` gets the URL without its query and fragment unless this is `true` and the owner approved it |
 
@@ -1284,7 +1427,7 @@ until the user picks the app.
 |-------|------|-------------|
 | `id` | string | Storage-safe slug, unique within the app |
 | `entry` | string | ESM module, relative to `ui/` (same base as `ui.entry`) |
-| `hosts` | string[] | 1-64 hostnames, with the same rules as `linkPreviews.hosts`. Only `https:` links on the default port and without a user name match |
+| `hosts` | string[] | 1-64 hostnames, each checked like a `linkPreviews.hosts` entry. Only `https:` links on the default port and without a user name match |
 | `fullUrl` | boolean | Optional. `open` gets the URL without its query and fragment unless this is `true` and the owner approved it |
 
 At most **one** entry per app; a click goes to the first enabled app whose `hosts`
@@ -1349,6 +1492,46 @@ Closing the dialog first calls `cancel(id, 'closed')`. `offerCopy` and `offerOpe
 put a **Copy** or **Open &lt;host&gt;** item in that menu: nothing is
 copied or opened until the user picks it. Links inside the frame open through the
 dashboard's link bridge.
+
+### `contributes.botChatServers` — Tools in a Bot's Own Chat
+
+**Preview** (`bot_chat_app_tools`, off by default). Offers some of the app's MCP
+servers to the chats of the owner's Bots. A Bot's own chat normally carries the
+platform tools only; with this, it also carries the offered servers, and only on
+the Bots the owner ticked for the app.
+
+```json
+{
+  "agents": ["agents/lead.json"],
+  "permissions": { "bots": ["tools"] },
+  "contributes": {
+    "botChatServers": [{ "agent": "lead", "server": "inbox" }]
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `agent` | string | One of the app's own agents (the file stem of an `agents` entry) |
+| `server` | string | A server that agent's spec declares in `mcpServers` |
+
+Nothing mounts from this alone. All of these must hold, read each time a Bot's
+chat starts its agent: the preview is on, the app is enabled, the owner approved
+the `tools` Bot scope (`permissions.bots`), and the owner ticked the Bot on the
+app's page. The server joins that one chat as `<app>:<server>`, with
+`KIROCREW_SESSION_LABEL` set to the chat's session, so the server can tell which
+Bot calls it. A platform server of the same name wins. Each call still goes
+through the Bot's own approvals.
+
+Unticking the Bot or updating the app takes the server off at the start of that
+chat's next turn: the chat restarts fresh without it. Disabling or uninstalling
+the app stops Bot chats that are using its servers immediately, interrupting the
+current turn if one is running. Ticking a Bot or enabling the app reloads the
+chat in place.
+
+A Bot whose chat runs on the Kiro CLI harness gets none of these servers: Kiro CLI
+reads the Bot's agent file off disk and has no per-session channel to carry them.
+Its chat says so once. Pin the Bot to Kiro Agent, Claude Code or Codex to use them.
 
 ### `contributes.composerActions` — Buttons That Put Text in the Composer
 
@@ -1911,7 +2094,7 @@ packages at all.
 | `permissions.memberThreads` | boolean | Widens `sessionApproval` to a Bot's pinned DM thread (the live `member-*` slot the owner opened): the same actions, nothing else about the Bot. Grants nothing without `sessionApproval`; see [the scope below](#permissionsmemberthreads--a-bots-own-thread) |
 | `permissions.spawn` | boolean | May start a background agent through the host's subagent manager (`ctx.spawn`) |
 | `permissions.jobs` | boolean | May run durable background work through `ctx.job` and the app-owned `_jobs/*` routes |
-| `permissions.bots` | string[] | Bot scopes, `"read"` and `"wake"`; any other entry is dropped. `read` lists the Bots the owner ticked for this app with their status and goals; `wake` sends one of them a fixed line the gateway writes. The owner ticks Bots in the app's detail page, and a fresh install reaches none. Also declare `/api/members` in `permissions.api`. A scope an update adds waits for the owner's approval. Never reaches a Bot's chats, briefing or rules. Called from the app's backend with its app token ([api-reference](api-reference.md#bots-permissionsbots-from-your-backend)) |
+| `permissions.bots` | string[] | Bot scopes, `"read"`, `"wake"` and `"tools"`; any other entry is dropped. `read` lists the Bots the owner ticked for this app with their status and goals; `wake` sends one of them a fixed line the gateway writes; `tools` (behind the `bot_chat_app_tools` feature preview) mounts the servers in [`contributes.botChatServers`](#contributesbotchatservers--tools-in-a-bots-own-chat) on each ticked Bot's own chat. The owner ticks Bots in the app's detail page, and a fresh install reaches none. Also declare `/api/members` in `permissions.api` for `read` and `wake`. A scope an update adds waits for the owner's approval. Never reaches a Bot's chats, briefing or rules. Called from the app's backend with its app token ([api-reference](api-reference.md#bots-permissionsbots-from-your-backend)) |
 | `permissions.proposeCrewmate` | boolean | **Preview, switched off**: `ctx.crewmate` stays `None` until an owner view lists the cards. May propose one Bot from a `.crewmate` bundle through `ctx.crewmate`. Gates a real capability like `spawn`: `ctx.crewmate` is absent unless the value is literally `true`. Each proposal is an owner change card; only the owner's press creates the Bot ([api-reference](api-reference.md#bot-proposals-ctxcrewmate)) |
 | `permissions.agentTurns` | boolean | May run agent turns on sessions keyed `<app>-<id>` through `ctx.turns`: every tool goes through the host's tool gate under this app's identity, and every turn is admitted as Crew automation. Gates a real capability like `spawn`: `ctx.turns` is absent unless the value is literally `true` ([api-reference](api-reference.md#agent-turns-ctxturns)) |
 | `permissions.chatSlots` | boolean | May open and drive dashboard chat slots keyed `<app>-<id>` through `ctx.chat_slots`: turns through the host's own chat runner under this app's identity, the slot's queue, stop, archive, transcript and the AutoNudge loops on those slots, never another slot. Shown at the trust prompt. `ctx.chat_slots` is absent unless the value is literally `true` (App Kit seam level 7, [api-reference](api-reference.md#chat-slots-ctxchat_slots)) |
@@ -2005,6 +2188,10 @@ be answerable from the manifest, as `spawn` and `jobs` are.
 > enables it again from the detail page, which shows why. An update that adds an
 > entry to `permissions.api` or `permissions.events` keeps the app enabled but
 > withholds the new entries until the user approves them on the detail page.
+> Until then a call only a new `permissions.api` entry covers answers
+> `403 app_permission_not_approved`, and a path no entry covers answers
+> `403 app_permission_not_declared`; each body says what to do
+> ([API reference: permission refusals](api-reference.md#permission-refusals)).
 > Official catalog entries mirror this flag and its scope so users see them before
 > install even when the store skips fetching the app manifest. Install-time path
 > traversal is blocked separately by
@@ -2458,9 +2645,11 @@ Level 2 of the bridge (App Kit seam level 7) adds:
   release, and follow `onDrag((phase, x, y) => ...)` (`start`, `move`, `end`).
   A message sent to this window goes to the copy hosting the avatar.
 - `showSession(slotKey)`: raise the dashboard on a session (resolves `true` once it
-  is there to show it), and `openExternal(url)` for an `https:` link. Each is answered
-  only within 2 s of a mouse or key press the shell saw in the window, one request per
-  press (its release does not count again), never from a background window.
+  is there to show it; a window shown from a crew names a session on that crew, which
+  the dashboard opens as a crew link does), and `openExternal(url)` for an `https:`
+  link. Each is answered only within 2 s of a mouse or key press the shell saw in the
+  window, one request per press (its release does not count again), never from a
+  background window.
 
 The trust prompt lists the window shapes you declare before the user says yes.
 

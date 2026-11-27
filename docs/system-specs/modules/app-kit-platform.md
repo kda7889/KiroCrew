@@ -879,7 +879,13 @@ shipped builtin's execution exemption and leaving the boot-warmed first-party
 name and MCP-server sets stale until the next restart. Symmetrically,
 `register_builtin_apps` stands down when a user-installed app already occupies the
 directory, leaving their install untouched, because taking it over is
-unrecoverable.
+unrecoverable. Until the wheel copy is released (§ Former built-in adoption), that
+built-in still serves the name: its routes register and every hook root chooser
+resolves the shipped package. A local or git build named like a built-in is a
+legitimate way to test one, so it is not refused; `builtin_shadow.shadowed_builtin_notice`
+names the situation instead, appended to the install result's `message` and set as
+`shadowedBuiltin` on the app's `/api/apps` and `kirocrew app info` row, with the App
+Store step added when the name is pinned for adoption.
 
 Frontend badges and affordances read the same three fields
 (`origin === 'builtin'`, `resources === 'app'`, `lifecycle === 'gateway'`,
@@ -1336,7 +1342,7 @@ untouched.
 | `<app>:<server>` on disk | **persisted as submitted** — the snapshot still wins where the platform agrees the name exists |
 | `<app>:<server>` NOT on disk, app uninstalled | **dropped** — `_deregister_mcp_servers` removed it |
 | `<app>:<server>` NOT on disk, app installed but DISABLED | **dropped** — same, and reconciliation never revisits it |
-| `<app>:<server>` NOT on disk, app installed, ENABLED and DECLARING it | **it depends** — `_register_mcp_servers` scrubs an HTTP server with no live port only when the app runs a GATEWAY-MANAGED backend (`backend.entryPoint` set); a manifest's illustrative port is then a dead URL that breaks every kiro session. A SELF-MANAGED app (empty `backend.entryPoint`) has an authoritative fixed url and is **persisted** — mirroring `_collect_app_mcp_servers` |
+| `<app>:<server>` NOT on disk, app installed, ENABLED and DECLARING it | **it depends** — `_register_mcp_servers` scrubs an HTTP server with no live port only when the app runs a GATEWAY-MANAGED backend (`backend.entryPoint` set); a manifest's illustrative port is then a dead URL that breaks every kiro session. A SELF-MANAGED app (empty `backend.entryPoint`) has an authoritative fixed url and is **persisted** — mirroring `_collect_app_mcp_servers`. Only a loopback url names the backend (`bridges_mcp.is_app_backend_mcp_url`): a url on any other host, such as a hosted MCP gateway, is **persisted** as declared for either kind of app, and its port is never swapped for the backend's |
 | host-owned name containing `:` (an edition extra), not on disk | **persisted** — the host's key, not an app's; the host axis is unchanged |
 | any, spec readable but carrying no `mcpServers` key | **dropped** — a keyless spec holds no bridge, which is a definite answer; reading it as "unknown" lets the resurrection through |
 | any, spec unreadable, or `mcpServers` present but not an object | **persisted** — best-effort, so this endpoint stays the repair path for a corrupt spec, and nothing is deleted on evidence that cannot be read |
@@ -1393,11 +1399,15 @@ host agent.
 
 ## 2. Auto-approve is intersected with the governance ceiling
 
-A granted server normally lands in the agent's `allowedTools` (auto-approve):
-the user asked for that server explicitly, and for an unattended app agent a
-prompt resolves to "rejected", so granting it means granting its use.
+A grant mounts the whole server (`@server` in `tools`) but auto-approves only the
+tools its own `autoApprove` names, one literal `@server/<tool>` entry each in
+`allowedTools` (a glob verb is skipped). That entry is the only carrier: the
+registration's last pass strips an app map's server `autoApprove`
+(`honour_owner_written=False`). A tool left out of the list asks before it runs,
+which is what an app's per-tool approval setting promises; for an unattended app
+agent that ask resolves to "rejected". A `mountOnly` grant writes no entry.
 
-**Except where the enterprise ceiling forbids it.** Auto-approve is the one path
+**Each entry is also intersected with the enterprise ceiling.** Auto-approve is the one path
 that never reaches `hooks.on_tool_call`: kiro-cli only sends
 `session/request_permission` for tools it must ask about, and the governance deny
 hangs off that request. Writing a ceiling-denied server into `allowedTools` would
@@ -1410,7 +1420,7 @@ So the grant is intersected with Level 1 POLICY at policy-write time
 
 | Ceiling | Result |
 |---|---|
-| permits | auto-approved, as before |
+| permits | the tools the grant's `autoApprove` names are auto-approved; the rest ask |
 | **denies** | stays in `tools` (the grant is not discarded) but NOT in `allowedTools`, which forces every call through `request_permission`, where the gate denies it |
 | absent (standalone) | unchanged behaviour |
 
@@ -2189,7 +2199,7 @@ Writer: `apps/lifecycle.py`; consumer: an app's `publish`/`_broadcast`.
 
 `build_app_context` builds `ctx.crewmate` (`apps/crewmate_sdk.py::CrewmateSDK`) only when `crewmate_sdk.PREVIEW_ENABLED` is on (off until the owner view below ships), the manifest's `permissions.proposeCrewmate` is literally `true` and the builder passed the gateway's Application as `crewmate_host`. Both builders pass it (`hooks_integration._build_app_context_from_info`, `LifecycleDispatcher._build_context`), whatever the app's `routes` hook says, because the SDK never hands the Application to the app.
 
-`propose(bundle)` runs `crewmate_bundle.crewmate_import_params`, which fails closed on an unknown key in the bundle, `crewmate`, `agent`, `goals`, `rules`, `sender` or `avatar`, another format, a newer `formatVersion`, a grant, a `user:` or non-`builtin:` dashboard id, a bundled skill or `script` cron without its files (an app hands none), an avatar it does not carry, and any `agent.json` MCP server or skill (rfc-crewmate-share.md §5.7). Rules, crons, skill references and `avatarTraits` are imported; key results and a dashboard this build does not ship are listed in `not_imported`. `handlers/change_cards.py::propose_app_card` then stores one `crewmate.import` card under `slot_key` `app:<name>` with an empty `session_key`, and writes nothing else. `propose_for_caller` refuses that kind and any `app:` key from a chat caller, and `list_kinds` leaves the kind out, so no agent can raise it. The card's plan opens as `crewmate.create`'s: `POST /api/agents` with `approval_mode: "normal"`, then the long-term goal, then the rules, a shipped builtin dashboard and each message cron, created paused. It shares that kind's evidence, member-id-checked Undo and state reads through `CREWMATE_CREATING_KINDS`. The app token cannot run a plan step: `change_card_middleware` refuses it on every hooked route.
+`propose(bundle)` runs `crewmate_bundle.crewmate_import_params`, which fails closed on an unknown key in the bundle, `crewmate`, `agent`, `goals`, `rules`, `sender` or `avatar`, another format, a newer `formatVersion`, a grant, a `user:` or non-`builtin:` dashboard id, a bundled skill or `script` cron without its files (an app hands none), an avatar it does not carry, and any `agent.json` MCP server or skill (rfc-crewmate-share.md §5.7). Rules, crons, skill references and `avatarTraits` are imported; key results and a dashboard this build does not ship are listed in `not_imported`. `handlers/change_cards.py::propose_app_card` then stores one `crewmate.import` card under `slot_key` `app:<name>` with an empty `session_key`, and writes nothing else. `propose_for_caller` refuses that kind and any `app:` key from a chat caller, and `list_kinds` leaves the kind out, so no agent can raise it. The card's plan opens as `crewmate.create`'s: `POST /api/agents` with `approval_mode: "normal"`, then the long-term goal, then the rules, a shipped builtin dashboard and each message cron, created paused. It shares that kind's evidence, member-id-checked Undo and state reads through `CREWMATE_CREATING_KINDS`. The app token cannot run a plan step: `change_card_middleware` refuses it on every hooked route. Once a view shows the card, the owner edits its name before the press, as on every import card: the kind marks `name` editable and the card draws a name field in place of its Name row while it is pending or failed.
 
 Not built yet: the owner-facing view that lists `app:` cards (they are stored but no chat slot shows them), cancelling them when the app is disabled, re-consent when an update adds the permission, and a provenance stamp on the crew record.
 
@@ -3109,7 +3119,18 @@ owner has approved for each app are stored in
 `member-records/app-grants/<app>.json` (`{"api": [...], "events": [...]}`,
 `apps.protected_app_state`), outside the app's own tree: code in the app's
 sandbox can write `apps/<name>/`, and `member-records/` is masked in every
-sandbox mode. Every
+sandbox mode. The owner's approval of an app's `ui.startup` module is kept
+the same way, in `member-records/app-startup/<app>.json` (`apps.startup_modules`),
+as `{version, entry, digest, files}` with per-file SHA-256 hashes. An uninstall
+snapshots, forgets and on failure restores it with the approved set. An owner install
+or update with no `ui.startup` forgets it in the record-writing transaction and
+restores it if that transaction fails. A committed withdrawal emits SEL
+`app_startup_revoke` (`completed`, with `install dropped ui.startup` or
+`update dropped ui.startup`) through the approval verb's audit helper. The lifecycle
+result's `message`, carried by the HTTP response and printed by the CLI, says that
+startup approval was withdrawn and UI files are served without its checks. Keeping
+`ui.startup` keeps the record; a failed transaction emits no completed withdrawal.
+A direct edit of `app.json` never withdraws this record or bypasses serving checks. Every
 enforcement point -- `token_auth._app_api_allowlist`,
 `ws_event_scope._read_declared_events`, and the hook context's event bus via
 `approved_manifest_permissions` -- grants only entries the live manifest
@@ -3183,6 +3204,15 @@ the one-time import first, so the import's lock is the only lock needed.
   `approvedGrants`. The approved event set is part of `hook_signature`, so
   approving events reloads the app's hooks and rebuilds its event bus; the API
   and WebSocket caches pick an approval up within their refresh interval.
+  Until the owner approves, an app-token call on an `/api/` path that only a
+  held-back `api` entry covers answers 403 `app_permission_not_approved`, whose
+  body lists those entries as `pending_approval` and tells the app the owner's
+  step: the app's page (`/apps/detail/<name>`), the "Approve new
+  permissions" button, and the refresh interval. A path no declared entry
+  covers answers `app_permission_not_declared`, which names the `app.json`
+  change, the update and the approval (dashboard-token-auth, App-token scope
+  confinement). `held_back_app_grants` supplies the entries; it reads the same
+  approved set and lists nothing when none is stored.
   `get_app` is read-only, like `list_apps`.
 - **Failure direction is closed.** An install without the file whose old
   manifest is unreadable gives an empty previous set on update; a stored set
@@ -4647,7 +4677,36 @@ declared file through `pinned_fs.open_in_pinned_parent`, gates the descriptor on
 descriptor and answers with the same `default-src 'none'; sandbox` policy and `nosniff`.
 It differs in serving the wider `_ALLOWED_EXTENSIONS` set (`.js`/`.json`/`.mjs`/`.css`/`.map` and fonts)
 and in being UNAUTHENTICATED, which is why it streams in `_UI_STREAM_CHUNK` pieces
-instead of buffering.
+instead of buffering for unapproved apps. Every UI file of an app with a startup
+approval is buffered: `startup_modules.approved_module` reads it once from the pinned
+descriptor (at most `_UI_MAX_BYTES`) and compares those bytes' SHA-256 to `files[rel]`.
+The stored `digest` must equal SHA-256 over the map's sorted `rel + NUL` and raw file
+hashes. Both the tree inventory and record map are limited by `_MAX_UI_FILES` (4,096).
+The parser rejects an over-cap map before validating entries or recomputing its digest;
+the approval writer runs that same parser before storing a record. Invalid entries
+name the offending path. App-list admission inventories once, refuses differing path
+sets without file reads, and stops at the first mismatching file or size-cap error.
+No other UI file is opened during serving, and stat metadata is never a cache
+key. The handler sends exactly the checked buffer; its ETag carries the approved
+digest. Verified responses omit `Last-Modified` and require that ETag for a 304;
+a wildcard returns the full verified bytes. All served types, including images and
+fonts, take this check. Startup mounts use `/apps/<name>/ui/startup:<digest>/<entry>`,
+with the digest supplied only on an admitted app-list row; the mount key includes
+name, version and digest. Relative imports inherit the prefix, which requires a
+current approval with that digest, including after revocation or re-approval.
+The route strips a strictly validated prefix before applying the same path,
+extension, containment and descriptor guards. Absolute imports, climbs out of the
+prefix and fetch-and-eval in already-approved code can reach ordinary UI URLs.
+Only ordinary URLs with an absent record leave serving unchecked. Unknown, changed or unavailable
+files, unreadable records, missing `files` or inconsistent maps answer 409 with
+`code`, `reason` and `remedy`, never file bytes. Unsafe app names retain 404 with no
+reflected remedy; refusal logs quote request paths and exceptions. The remedy names
+`kirocrew app startup <name>` to approve the current code and
+`kirocrew app startup <name> --revoke`, which also works without a declared startup
+entry. The app-list reader uses the same parser but treats these faults as no
+approval (`needs-approval`). The eight permits bound concurrent reads, hashes and
+checked buffers; the file-count cap bounds per-entry map validation
+([security](security.md), *App startup-module approvals*).
 
 **Text files go gzip-encoded.** A `_GZIP_EXTENSIONS` file (`.mjs`/`.js`/`.css`/`.json`/
 `.svg`/`.map`) of at least `_GZIP_MIN_BYTES` is sent `Content-Encoding: gzip` when
@@ -4655,7 +4714,8 @@ instead of buffering.
 `gzip` entry decides, `q=0` included, and `*` counts only when gzip is not named, so
 `gzip;q=0, *` gets identity. Each
 streamed chunk passes through one per-request `zlib` compressor off the event loop, so
-memory stays one chunk plus the compressor's state, and the body goes chunked (its
+memory holds one chunk plus the compressor's state and, for approved apps, the checked
+file buffer and its response reader. The body goes chunked (its
 length is not known up front); the `remaining` cap still bounds the bytes read. A file
 that hits EOF short of its validated size (truncated under the descriptor) aborts the
 connection instead of finishing the gzip member, since no `Content-Length` would expose
@@ -5407,7 +5467,9 @@ The boundary:
   `linkPreviewHosts` and `linkPreviewTextPatterns`, in the app's
   `approved-grants.json` beside `api` and `events` (`apps/link_preview_grants.py`).
   Hosts are stored normalized (lowercase, IDNA, no trailing dot) and a public suffix
-  or bare TLD is refused at manifest validation; a pattern's entry is
+  or bare TLD is refused at manifest validation. A provider may list any number of
+  hosts: `claimsHost` matches a link in one set
+  lookup per label of its host, whatever the list's length. A pattern's entry is
   `<id>:<flags without g>:<source>`, so any change to it is a widening. An update
   that widens either family is held back until the owner approves it on the App
   Detail page; narrowing applies at once. A third family, `linkPreviewFullUrl`
@@ -5950,8 +6012,9 @@ Writers: `website/src/app-sdk/PullRequestPanel.tsx`, `website/src/app-sdk/index.
 `useIssues`, `IssueList` and `IssueCard` on `@kirocrew/app-sdk`
 (`website/src/app-sdk/issues/`) list the issues `POST /api/source/issues` returns, through
 one query shape (`IssueSearchRequest`) and one row shape (`IssueSummary`,
-`website/src/types/index.sources.ts`). The views draw GitHub, GitLab, Jira and Linear
-rows, all four of which the route serves. They are App Kit seam level 6.
+`website/src/types/index.sources.ts`). The views draw GitHub, GitLab, Jira, Linear and
+ServiceNow rows, all five of which the route serves. A ServiceNow list offers no label
+filter, since its records have none, and like Jira and Linear it shows no comment count. They are App Kit seam level 6.
 
 The transport is chosen the way §18g chooses the pull-request client, from the
 published identity: an **external** app posts through its scoped client once
@@ -7099,7 +7162,7 @@ which module owns which part, so a change lands in its owner.
 | Module under `src/kiro_crew/apps/` | Owns |
 |---|---|
 | `manager.py` | The facade: the only import path and patch surface. It defines nothing and installs `kiro_crew._facade_mirror` over the owners below |
-| `manager_records.py` | Where an app lives (`apps_dir`, `app_dir`, `app_data_dir`), its `installed.json` record (`InstalledApp`, `_read_installed`, `_write_installed`), the approved `permissions.api` / `permissions.events` set, the update-in-flight fencing every grant read checks (`staged_app_grants`), `AppResult` and `get_app_manifest` |
+| `manager_records.py` | Where an app lives (`apps_dir`, `app_dir`, `app_data_dir`), its `installed.json` record (`InstalledApp`, `_read_installed`, `_write_installed`), the approved `permissions.api` / `permissions.events` set, the update-in-flight fencing every grant read checks (`staged_app_grants`), the declared entries still waiting for approval that a refusal names (`held_back_app_grants`), `AppResult` and `get_app_manifest` |
 | `manager_tree.py` | Validating a source directory (`_validate_source_path`, `_check_min_version`), the copy (`_copy_app_tree`, `copy_app_tree_as_installed`), the preserved-`data/` rules (`gateway_data_dir_obstruction`, `_owned_data_dir`), `_remove_any_shape` and `InstalledTreeRefused` |
 | `manager_install.py` | `install_app`, `update_app`, the per-app `app_lifecycle_lock` and the scoped `registry_source_repository` |
 | `manager_activation.py` | `enable_app`, `disable_app` and the governance check every activation passes (`_app_activation_denied`) |
@@ -7147,7 +7210,7 @@ records which module owns which part, so a change lands in its owner.
 | `bridges_agents.py` | Materializing an app's agents: the app MCP policy (`_apply_agent_mcp_policy`, `_apply_agent_prompt`), host-managed MCP references, user edits carried across a refresh, shipped agent templates, `_register_agents` / `_deregister_agents` and `purge_uninstalled_agent_residue` |
 | `bridges_skills.py` | `_register_skills`, `_deregister_skills` and the startup `reconcile_app_skills` |
 | `bridges_crons.py` | The app cron manifest (`load_app_cron_defs`), the manifest digest and the resync of a changed job, `register_app_crons_with_service`, deregistration, and the execution-driven disarm and reconcile passes |
-| `bridges_mcp.py` | Registering an app's MCP servers: `resolve_stdio_command` and its interpreter and launch-target rules, the `kirocrew` host-CLI pin, the live backend port rewrite (its launch-target anchor is also what adoption's E10 asks of a pinned tree's stdio server), the unresolvable-command and secret-reference warnings, backendless deps provisioning, `_register_mcp_servers` / `_deregister_mcp_servers`, re-registration and scrub, and the legacy shared `mcp.json` scrub |
+| `bridges_mcp.py` | Registering an app's MCP servers: `resolve_stdio_command` and its interpreter and launch-target rules, the `kirocrew` host-CLI pin, the live backend port rewrite of a loopback url (its launch-target anchor is also what adoption's E10 asks of a pinned tree's stdio server), the unresolvable-command and secret-reference warnings, backendless deps provisioning, `_register_mcp_servers` / `_deregister_mcp_servers`, re-registration and scrub, and the legacy shared `mcp.json` scrub |
 | `bridges_register.py` | `register_app` / `deregister_app` with `RegistrationResult`, `refresh_app_agents` and `refresh_app_agents_if_enabled`, the manifest-upgrade prune, the per-app boot reconcile `reconcile_enabled_app_resources(app_name)`, and dropping the session resume pointers an app's conversations held (`discard_app_session_pointers`) |
 
 Imports only point down, in the facade's `_OWNERS` order: sources, mcp_config, agents,
@@ -7588,6 +7651,15 @@ folder update would silently drop the app's listing provenance. A marketplace
 app has no update path until one resolves, verifies and re-confirms a new
 version.
 
+`update_app` refuses a new version whose `app.json` fails validation with
+`app_update_invalid`, the validator's errors as `error`, before anything is
+replaced; `install_from_registry` passes a failed result's code through. A new
+version whose only refusal is a `minKiroCrewVersion` above this build gets
+`kirocrew_version_too_old` instead, since updating Kiro Crew clears it. The
+App Store's row update and Update All key off that code to name the app and say
+that only its maker can fix it, with the validator's words on the next line
+(`pages/apps/useAppUpdates.ts`).
+
 Two owner-only routes in `apps/routes_market_install.py` drive those calls.
 `POST /api/apps/market/install` (`{ref, version?, account?, registry?}`) runs `prepare_market_install`
 in the executor and answers `{stagingId, confirm}`; it installs nothing.
@@ -7993,7 +8065,9 @@ stream, so `run` streams with `person_only_directive_refuser`
 (`dashboard/session_directive_apply.py`, as a cron turn and a workflow step do): a
 completed `set_project`, `reset_conversation`, `chat_tag` or `suggest_followup`
 call is refused with `refuse_user_origin_directive` (its wording, and a SEL `denied`
-row on the turn's key), and the refusals lead the reply. Nothing is applied.
+row on the turn's key), and the refusals lead the reply. Nothing is applied. The
+reply loses each line that only quotes a directive marker
+(`session_directive.strip_quoted_markers`), which the model read in a tool result.
 
 **Untrusted text** (`apps/untrusted_text_sdk.UntrustedTextSDK`, `ctx.untrusted`).
 Always present, built in `AppContext.__post_init__` from `name`, because it adds no
@@ -8109,6 +8183,35 @@ cannot tell a Bot it was not given from one that does not exist:
 
 A disabled app holds no Bot scope: `apps/bot_grants.app_bot_scopes` reads
 `is_app_enabled` on every call (pinned by `test_app_bot_disabled_token.py`).
+
+**The `tools` scope (preview `bot_chat_app_tools`, off by default).** A third scope
+mounts servers the app offers in `contributes.botChatServers` on the own chat of each
+ticked Bot. A Bot's chat runs on the shared `kirocrew-mate-conductor`, and its spec is
+built per session the way a Bot's worker spec is: `acp/session_mcp_crewmate.
+_crewmate_conductor_spec` (array hosts) and the KAS projection both call
+`bot_chat_app_tools.conductor_session_spec`, which adds an `<app>:<server>` entry
+read from the app agent's rendered spec only while the preview is on, the app is
+enabled, the scope is approved and the Bot is ticked. The shared conductor file is
+never written. Each Bot chat's agent process records the servers it was started
+with; the bot-grants PUT, enable, disable, update, uninstall and a switch of the
+preview each call `after_app_change`, which compares every live Bot chat with that
+record: a Bot that lost a server gets a queued no-replay discard (its next turn starts
+a fresh conversation without the old tool names), and a Bot whose servers were added
+or whose entries changed reloads in place. The preview reads through
+`edition_locks.feature_previews`, so it is off on LTS whatever is stored. A Bot chat
+on a harness outside `ACP_BACKENDS_MATE_WORKER_KIT` gets no app server: the array
+projection adds them only when its caller passes `bot_app_tools_carried` (the mirrors
+and the mirrorless member path pass `backend in ACP_BACKENDS_MATE_WORKER_KIT`), and
+Kiro CLI, which reads `--agent` off disk, never reaches `conductor_session_spec`. On
+any such harness the
+allocation door (`session_allocation_parts/get_or_create`) hands the provider's
+`mate_worker_kit_supported` to `bot_chat_app_tools.note_harness_without_app_tools`,
+which tells that chat once when the Bot has app tools turned on. This
+narrows `docs/decisions/2026-11-02-a-crewmates-worker-carries-its-template-policy.md`
+("the conductor takes nothing from the file") and
+`docs/decisions/2026-11-04-conductors-stay-simple-and-new-abilities-go-to-workers.md`
+("a mate's conductor mounts only Crew's own MCP servers") for this one case, as
+`docs/decisions/2026-11-23-bot-chats-may-mount-owner-approved-app-servers.md` records.
 
 The app's requests still pass the path gate, so it also declares `/api/members` in
 `permissions.api`. The token allowlist, CORS and frame-ancestors are unchanged.
@@ -9098,7 +9201,12 @@ host carries no import of a store another program wrote:
 dashboard window and routes it to that session (`/chat?sid=`), or only raises it for
 `""`, and resolves true only when the dashboard is there to show it, so a caller keeps a
 notification it could not act on (`website/electron/dashboard-session.js`, the same
-check the kirocrew:// deep link uses). `openExternal(url)` hands an `https:` link to the
+check the kirocrew:// deep link uses). A window a crew serves (`gatewayChoice`) names a
+session on that crew: the crew comes from the window's own target, never the page, and the
+dashboard gets the crew link's route (`/chat?crew=<id>&crewSid=<key>`, refused before the
+window moves when the key or id fails the crew link's rules), so a crew's key never opens a
+same-named local session; true there means the dashboard has the link, which can still
+refuse it as a crew link is refused. `openExternal(url)` hands an `https:` link to the
 OS browser and nothing else. Both move the user's focus, so each is answered only while
 the user is acting in the sender: the shell saw a mouse or key press start in that window
 within the last 2 s (Electron's `input-event` `mouseDown` or `rawKeyDown`, not a release or

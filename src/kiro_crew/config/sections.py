@@ -214,6 +214,7 @@ from kiro_crew.config.sections_browser import (  # noqa: F401
     RECORDING_MB_MIN,
     RECORDING_SESSION_MB_DEFAULT,
     RECORDING_TOTAL_MB_DEFAULT,
+    RUN_MAX_MINUTES_CAP,
     RUN_MAX_OPS_CAP,
     RUN_MAX_REPEATS_CAP,
     BrowserConfig,
@@ -221,6 +222,7 @@ from kiro_crew.config.sections_browser import (  # noqa: F401
     BrowserLiveConfig,
     BrowserRecordingConfig,
     BrowserRunConfig,
+    _spelled_int,
     _validated_choice,
     _validated_isolation,
     _validated_max_fps,
@@ -264,6 +266,7 @@ from kiro_crew.config.sections_dashboard import (  # noqa: F401
     CHAT_ENTRY_CACHE_ENTRIES_DEFAULT,
     CHAT_ENTRY_CACHE_ENTRIES_MAX,
     CHAT_ENTRY_CACHE_ENTRIES_MIN,
+    DEFAULT_APPROVAL_MODES,
     EXTERNAL_TERMINAL_APPS,
     FEATURE_PREVIEW_FLAGS,
     LEGACY_VERBOSITY_ALIASES,
@@ -402,6 +405,7 @@ from kiro_crew.config.sections_limits import (  # noqa: F401
     parse_autocompact_pct,
 )
 from kiro_crew.config.sections_session import (  # noqa: F401
+    BOT_MAX_WORKERS_CONDUCTING,
     BOT_MAX_WORKERS_DEFAULT,
     BOT_MAX_WORKERS_MAX,
     BOT_MAX_WORKERS_MIN,

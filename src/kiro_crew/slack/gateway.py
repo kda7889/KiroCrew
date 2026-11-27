@@ -575,6 +575,8 @@ from kiro_crew.slack.gateway_runtime.nudge_channel_fire import (
 from kiro_crew.slack.gateway_runtime.process_entry import (
     _SIGNING_KEY_PREFLIGHT_TIMEOUT_SECS,
     BOOT_RESTART_HINT,
+    _ask_again_while_pick_open,
+    _kas_floor_defaulted,
     _kas_floor_gates_spawns,
     _live_session_agents,
     _live_session_work_dirs,
@@ -585,6 +587,7 @@ from kiro_crew.slack.gateway_runtime.process_entry import (
     _start_kas_cli_floor,
     _stop_session_environments,
     _sweep_predecessor_session_work_dirs,
+    _watch_saved_kiro_pick,
     run_gateway,
     signing_key_preflight,
 )
@@ -1016,6 +1019,7 @@ class GatewayOrchestrator:
     _cron_run_single = _cron_turn._cron_run_single
     # gateway_runtime/cron_delivery.py
     _deliver_cron_agent_result = _cron_delivery._deliver_cron_agent_result
+    _deliver_cron_reminder = _cron_delivery._deliver_cron_reminder
     # gateway_runtime/heartbeat_turns.py
     _init_heartbeat = _heartbeat._init_heartbeat
     # gateway_runtime/nudge_channel_fire.py

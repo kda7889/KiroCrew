@@ -329,7 +329,11 @@ other; single quotes group nothing under `cmd.exe`.
 Both platforms get `KIROCREW_HOOK_EVENT` and `KIROCREW_HOOK_CONTEXT` in the
 environment, and the hook-event JSON on stdin. `KIROCREW_HOOK_CONTEXT` is capped
 at 500 characters on every event. Read the full text from stdin instead: `prompt`
-on `UserPromptSubmit`, `assistant_text` on `Stop`.
+on `UserPromptSubmit`, `assistant_text` on `Stop`. On `PostToolUse`,
+`tool_response.output` holds at most the first 2,000 characters of the redacted
+tool output: `truncated` says whether it was cut, and `output_length` is the
+length of the text it was cut from, which is no more than about 8,000 for a tool
+result Kiro Crew reads over ACP.
 
 In a dashboard chat, and on a channel turn that runs the Hooks page's hooks (your
 own conversation, such as a Slack 1:1 DM), `prompt` is your message, not the
@@ -480,7 +484,11 @@ dedup, same per-event and total caps. Fourteen triggers are accepted, each in
 kiro-agent's own PascalCase, its IDE camelCase spelling, its CLI alias, or the
 Open Plugins alias `afterFileEdit` — the whole table from kiro-agent's
 `packages/kiro-agent/src/hooks/trigger-names.ts`, plus `PreCompact` and
-`PostCompact` from the pinned engine, matched without regard to case. Five map onto the five kiro-cli event
+`PostCompact` from the pinned engine, matched without regard to case. The engine's
+`PermissionRequest` trigger (`permissionRequest`) is not one of them: on the engine a
+hook there can allow or deny the permission request itself, and Kiro Crew keeps that
+answer in its own approval flow, so such a hook is skipped with an
+`unknown trigger` warning; to refuse a tool call, use a `PreToolUse` hook. Five map onto the five kiro-cli event
 names: `PreToolUse` to `preToolUse`, `PostToolUse` to `postToolUse`,
 `UserPromptSubmit` to `userPromptSubmit`, `SessionStart` to `agentSpawn`, `Stop`
 to `stop`. Only those five reach kiro-cli; a hook on `SessionEnd`, `PreTaskExec`,
@@ -532,8 +540,9 @@ kiro-cli runs the agent spec's `userPromptSubmit` hooks itself, on the text Kiro
 Crew sends the model, with your message inside it. A session's first message
 carries the full session-start context: the agent prompt, the critical rules,
 memory and session context. The first message after a compaction carries part of
-it again (the agent prompt, the memory index, skills and lessons), and later
-messages carry Kiro Crew's per-turn context instead. A room or guest conversation
+it again (the agent prompt, the critical rules, the memory index, skills and
+lessons), and later messages carry Kiro Crew's per-turn context instead. A room or
+guest conversation
 gets less at both points, without the rules or memory. In every case that hook's
 stdin `prompt` is not the message you typed, and a hook that checks `prompt` for
 words also checks text you did not write. A Hooks-tab `UserPromptSubmit` hook

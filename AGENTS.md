@@ -270,6 +270,13 @@ seams: [app-kit-platform](docs/system-specs/modules/app-kit-platform.md).
 
 ## Git
 
+For this owner's fork, the shared development result is `main` at `origin`
+(`https://github.com/kda7889/KiroCrew.git`). `upstream` names
+`kirodotdev/KiroCrew`; never publish owner work to its main branch.
+Temporary work branches land in our main through a PR with a merge commit,
+preserving existing history. Fetch before publication and verify remote SHA
+after merging. Keep dirty files and active worktrees intact.
+
 - Do NOT proactively `git commit`. Commit only when asked.
 - Do NOT `git push` unless the user explicitly says to push. Being asked to commit
   is NOT permission to push.

@@ -1246,7 +1246,7 @@ async def run(self: GatewayOrchestrator) -> None:
     if not self._test_mode:
         from kiro_crew.apps.session_consent import reconcile_after_ready
 
-        _consent_task = asyncio.create_task(reconcile_after_ready())
+        _consent_task = asyncio.create_task(reconcile_after_ready(self.dashboard_state))
         self._background_tasks.add(_consent_task)
         _consent_task.add_done_callback(self._background_tasks.discard)
 
@@ -1558,9 +1558,13 @@ async def run(self: GatewayOrchestrator) -> None:
     if self._headless:
         # No page to open and no sign-in link to print: the address and how to get
         # a credential, which is never printed here.
+        from kiro_crew.dashboard.entry_gate import bound_port
         from kiro_crew.dashboard.headless import print_client_access
 
-        print_client_access(self._dashboard_port)
+        # The port the gateway bound, not a second read of the config.
+        print_client_access(
+            self._dashboard_port, bound_port(getattr(self._dashboard_runner, "app", None))
+        )
     elif not self._no_dashboard:
         try:
             host = resolve_dashboard_host(self._local_only, self._configured_host)
@@ -1637,7 +1641,7 @@ async def run(self: GatewayOrchestrator) -> None:
     # would pay a deepcopy plus a full nested-dataclass rebuild for one scalar.
     _probe_t = self._cfg.dashboard.mcp_probe_timeout_secs + 15
     try:
-        await asyncio.wait_for(_bg_mcp_probe(self.sessions), timeout=_probe_t)
+        await asyncio.wait_for(_bg_mcp_probe(self.dashboard_state), timeout=_probe_t)
     except asyncio.TimeoutError:
         print("👻 MCP probe timed out — continuing without full probe")
 
@@ -1730,9 +1734,10 @@ async def run(self: GatewayOrchestrator) -> None:
         # that boot's init_socket_mode then replaces without closing; until
         # then the route answers 503 slack_reconnect_unavailable. The
         # API-only server leaves it None.
-        from kiro_crew.slack.reconnect import reconnect_slack
+        from kiro_crew.slack.reconnect import reconnect_slack, wait_for_reconnect
 
         self.dashboard_state.slack_reconnect = lambda: reconnect_slack(self)
+        self.dashboard_state.slack_reconnect_wait = lambda: wait_for_reconnect(self)
         from kiro_crew.slack.owner_claim import OwnerClaim
 
         self.dashboard_state.slack_owner_claim = OwnerClaim(self)

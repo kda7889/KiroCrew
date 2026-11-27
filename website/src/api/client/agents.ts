@@ -84,6 +84,11 @@ export interface MemberRosterRow {
    *  the newest event is not a stop, and absent again once a newer
    *  conversational row lands. */
   last_message_stopped?: boolean
+  /** The agent file this bot runs on is gone (its package was uninstalled, or
+   *  the file was deleted), so its chats and schedules fail until the file is
+   *  back. The row is kept, because the bot still holds its memory and chats;
+   *  the page marks it and offers Delete bot. Omitted (not `false`) otherwise. */
+  agent_missing?: boolean
   kiro_agent?: string
   workspace?: string
   memory_store?: string
@@ -124,6 +129,10 @@ export interface MemberRosterRow {
    *  in one click. Absent on an older gateway, which has no such switch, or when
    *  the crewmate never opted in: read it as off. */
   dashboard_card_send?: boolean
+  /** Whether the sessions this Bot's thread opens also show in the person's
+   *  Sessions list while `dashboard.show_bot_sessions_in_list` is off (which lists
+   *  every Bot's). Off by default; absent reads as off. */
+  show_sessions_in_list?: boolean
   /** The person created this crewmate (the Crewmates page's create, or an
    *  approved `crewmate.create` / `crewmate.import` card): `source` is
    *  `kirocrew` AND the record carries a member id. Never true for the reserved

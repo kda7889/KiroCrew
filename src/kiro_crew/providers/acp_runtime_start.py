@@ -52,11 +52,20 @@ from kiro_crew.acp.mcp_session_report import (
 )
 from kiro_crew.acp.runtime import AcpRuntime, AcpRuntimeError
 from kiro_crew.acp.session_handle import AcpSessionHandle
-from kiro_crew.acp.session_handle_runtime_contract import AcpResumeNotRestored
+from kiro_crew.acp.session_handle_runtime_contract import AcpResumeNotRestored, answer_lost
 from kiro_crew.acp.session_mcp import agent_spec_snapshot
 from kiro_crew.acp.session_provider import AcpSessionProvider
+from kiro_crew.acp.session_provider_shared import (
+    RuntimeTreeGone,
+    note_unconfirmed_teardown,
+    teardown_confirmed,
+)
 from kiro_crew.acp.transport_errors import AcpDelegateLaunchFailed, delegate_launch_failed
-from kiro_crew.acp.types import ACP_BACKEND_KAS, ACP_BACKENDS_HARNESS_OWNED_SESSIONS
+from kiro_crew.acp.types import (
+    ACP_BACKEND_KAS,
+    ACP_BACKENDS_HARNESS_OWNED_SESSIONS,
+    ACP_BACKENDS_MEMBER_DISPATCH,
+)
 from kiro_crew.agent_sdk import host_auth
 from kiro_crew.agent_sdk.backends import (
     ACP_BACKENDS_SHARED_RUNTIME_ONLY_FOR_CHATS,
@@ -68,6 +77,7 @@ from kiro_crew.agent_sdk.tool_gate import (
     label_for,
 )
 from kiro_crew.agent_sdk.tool_search import resume_takes_tool_search_replay
+from kiro_crew.bot_chat_ending_fence import runtime_close_leaves_servers
 from kiro_crew.config.paths import kiro_sessions_dir
 from kiro_crew.messaging.link import telemetry_channel_of
 from kiro_crew.platform_compat import pid_exists
@@ -266,6 +276,39 @@ def _choices_file_may_exist(session_key: str | None = None) -> bool:
     except OSError:
         return True
     return True
+
+
+def _keep_abandoned_close(
+    provider: AcpProvider, runtime: Any, session_id: str | None, error: object = None
+) -> None:
+    """After a failed start left a shared runtime (``ChatSharePlacement.abandon``),
+    the eviction's own answer decides: a close the host did not confirm stays this
+    provider's unconfirmed close, kept for the retry. On a host whose close leaves
+    the session's servers running (codex) a close answer proves nothing: the close
+    is kept under the runtime's tree until that tree is confirmed dead, as
+    ``shutdown_shared`` keeps it. A Bot chat's start that failed with no session
+    id because the host's answer was lost (*error*, ``answer_lost``: a frame too
+    large, the runtime's death) may have left a session nobody can name: it is
+    kept under the runtime's tree. A refusal, from the host or from this side
+    before anything was sent, left none."""
+    key = provider._owning_session_key()
+    if not session_id:
+        if key and answer_lost(error) and _bot_chat_with_apps(key):
+            note_unconfirmed_teardown(provider, RuntimeTreeGone(runtime), None, session_key=key)
+        return
+    if runtime_close_leaves_servers(runtime):
+        if not teardown_confirmed(runtime, session_id, killed=True):
+            note_unconfirmed_teardown(
+                provider, RuntimeTreeGone(runtime), session_id, session_key=key
+            )
+    elif not teardown_confirmed(runtime, session_id, killed=False):
+        note_unconfirmed_teardown(provider, runtime, session_id, session_key=key)
+
+
+def _bot_chat_with_apps(key: str) -> bool:
+    from kiro_crew.bot_chat_app_tools import session_has_app_mount
+
+    return session_has_app_mount(key)
 
 
 async def _start_kiro_runtime(self: AcpProvider) -> None:
@@ -486,7 +529,15 @@ def _kas_machine_refusal(
 
 
 def _member_session_key(self: AcpProvider) -> str:
-    """This session's key when it is a member DM on a dispatch-capable backend.
+    """This session's key when it mounts session control on a dispatch-capable
+    backend: a member DM, or a Bot worker that conducts
+    (``members.mounts_session_control``). For a worker its thread opened that
+    reads the Bot's switch from the cached config load, the source the worker's
+    spec reads it from (``mate_worker.is_conducting_worker_execution``), so the
+    mount and the spec agree even for a start a save brings at once, ahead of the
+    watcher's copy. Blocking for such a worker: every caller runs it off the loop,
+    and only on a backend in ``ACP_BACKENDS_MEMBER_DISPATCH``; every other backend's
+    caller passes ``""`` without calling it, so the kiro path gains no hop (H13).
 
     Empty for every other session. One resolution rule for BOTH session
     establishment paths (session/new and session/load) — the mount must
@@ -494,14 +545,13 @@ def _member_session_key(self: AcpProvider) -> str:
     thread of its dispatch tools mid-conversation.
     """
     # circular import: members sits above the provider layer.
-    from kiro_crew.acp_backends import ACP_BACKENDS_MEMBER_DISPATCH
-    from kiro_crew.members import is_member_session_key
+    from kiro_crew.members import mounts_session_control
 
     skey = getattr(self._client, "_session_key", None)
     if (
         isinstance(skey, str)
         and self._client.backend in ACP_BACKENDS_MEMBER_DISPATCH
-        and is_member_session_key(skey)
+        and mounts_session_control(skey)
     ):
         return skey
     return ""
@@ -1101,13 +1151,20 @@ async def _start_kiro_runtime_impl(
                     else None
                 )
                 try:
+                    # Off the loop where a key can exist; every other host stops at the
+                    # membership read, as on create (H13).
+                    member_key = (
+                        await asyncio.to_thread(self._member_session_key)
+                        if self._client.backend in ACP_BACKENDS_MEMBER_DISPATCH
+                        else ""
+                    )
                     handle = await self._load_session_with_retry(
                         runtime,
                         str(session_file) if session_file else "",
                         resume_sid,
                         session_cwd,
                         agent,
-                        member_session_key=self._member_session_key(),
+                        member_session_key=member_key,
                         session_key=self._owning_session_key(),
                         channel_id=self._owning_channel_id() or "",
                         kas_memory_mode=self.kas_memory_mode,
@@ -1237,11 +1294,19 @@ async def _start_kiro_runtime_impl(
                     elif isinstance(remote, PreparedCloudSession) and session_key:
                         _forget_cloud_placement_when_ended(session_key, runtime)
             try:
+                # Read off the loop only on a backend that can mount session control (a
+                # Bot worker's answer reads its Bot's record); every other host reaches
+                # the membership read and stops, with no thread hop (H13).
+                member_key = (
+                    await asyncio.to_thread(self._member_session_key)
+                    if self._client.backend in ACP_BACKENDS_MEMBER_DISPATCH
+                    else ""
+                )
                 handle = await runtime.create_session(
                     cwd=session_cwd,
                     agent=agent or None,
                     harness_options=_harness_session_options(self),
-                    member_session_key=self._member_session_key(),
+                    member_session_key=member_key,
                     # Per session: on a shared chat runtime the process's own
                     # crew identity is the founder's, not this chat's.
                     crew_agent=self._crew_agent,
@@ -1557,8 +1622,26 @@ async def _start_kiro_runtime_impl(
                 # the lease released, and the runtime killed only when this
                 # start held its last lease.
                 await share.abandon(runtime, getattr(handle, "session_id", None))
+                _keep_abandoned_close(self, runtime, getattr(handle, "session_id", None), setup_exc)
             else:
-                await runtime.kill(expected=True, reason="failed session setup cleanup")
+                killed = False
+                try:
+                    await runtime.kill(expected=True, reason="failed session setup cleanup")
+                    killed = True
+                finally:
+                    # The placeholder ``_client`` this start never replaced launched
+                    # nothing; this runtime did, and the app servers its session
+                    # started may outlive the failure. Unless its whole tree is
+                    # confirmed dead, keep it as this provider's unconfirmed close
+                    # with the runtime as the retry handle, which the provider's
+                    # shutdown then reports (``_settle_shutdown_confirmation``).
+                    if not (killed and teardown_confirmed(runtime, None, killed=True)):
+                        note_unconfirmed_teardown(
+                            self,
+                            runtime,
+                            getattr(handle, "session_id", None),
+                            session_key=self._owning_session_key(),
+                        )
         except Exception:
             logger.debug(
                 "Cleanup kill of runtime after failed session setup failed",

@@ -307,7 +307,10 @@ Endpoints (host: `https://prod.us-east-1.auth.desktop.kiro.dev`, portal:
   `error` (with this sign-in's `state`, or none) fails the sign-in at once, and the
   tab names the reason in fixed words for each RFC 6749 §4.1.2.1 code
   (`_PORTAL_ERROR_REASONS`); nothing the request carries, `error_description`
-  included, reaches the page.
+  included, reaches the page. Every page the tab can land on (signed in, failed,
+  already finished, replaced, wrong address) is one titled HTML page, "Kiro Crew
+  sign-in", whose line sends the user back to the Kiro Crew dashboard (`_page`); a
+  stray hit without this sign-in's `state` gets a plain-text "Not found.".
 - **Device code:** `POST {host}/oauth/device/authorization`
   `{clientId:"Kiro-CLI", loginProvider:"Google"|"Github"}` →
   `{deviceCode, userCode, verificationUri, verificationUriComplete,
@@ -385,12 +388,42 @@ browser last submitted still comes first (`website/src/utils/companySignIn.ts`).
 An approved IdC token carries no profile ARN, so `_poll_oidc` resolves it with the
 control plane's `ListAvailableProfiles` (`auth/login/control_plane.py`). The Identity
 Center region does not name the control plane that serves the profile (a `us-east-1`
-instance can hold an `eu-central-1` profile), so the call asks every host in
-`_CPS_ENDPOINTS`, the login region's own first, and keeps the first answer that lists
-a profile. A host that refuses or sends an unreadable answer is logged and skipped.
-The poll ends as `error`, with nothing stored, when every host refused or none lists
-a profile (`no available Kiro profiles`); a connection failure is not skipped and
-raises out of the poll, since this leg has no transport budget (above).
+instance can hold an `eu-central-1` profile), and one account can hold profiles on
+two, so every company sign-in asks every host in `_CPS_ENDPOINTS`, one after another,
+the login region's own first: a token from an EU sign-in reaches the `us-east-1` host
+too. While the relay viewer is on, its own host is asked before them, and a listing
+there with any profile is final. Each host's listing reads every page (`nextToken`,
+at most `_MAX_PAGES`), and the result is every profile read, deduped by ARN in
+first-seen order, so its first entry is the first profile of the first host that lists one.
+Before any profile has been read, a host that refuses or sends an unreadable answer is
+logged and skipped (any failure at the viewer host, a transport error included), and a
+connection failure at a prod host raises out of the poll, since this leg has no
+transport budget (above). Once a profile has been read, at that host or an earlier one,
+any failure only ends that host's listing (logged, type only for a transport error)
+and the profiles already read stay. The poll ends as `error`, with nothing stored,
+when every host refused or none lists a profile (`no available Kiro profiles`). A host
+that accepts the connection and never answers costs up to the 30 s total of
+`HTTP_TIMEOUT` (`auth/refresh.py`).
+
+With one profile the poll stores it and answers `authorized`. With several it stores
+nothing yet: it holds the approved token on the pending login (out of its repr) and
+answers `{"status": "choose_profile", "profiles": [{arn, name, region}],
+"selected": <arn>}`, token-free. `selected` is the profile the slot's stored sign-in
+carries when it is listed (an unreadable store reads as none), else the first. A poll
+of a waiting login never polls the redeemed device code again: without `profile_arn`
+it repeats the same answer; with a listed one it stores that profile through the same
+`_persist_and_finish` as any poll, so a cancel, a sign-out in this process (404) or in
+another (`signed_out_during_login`, 409) wins exactly as there; an ARN the login did
+not offer answers `400 unknown_profile`, stores nothing and leaves the login waiting.
+`profile_arn` on a login that is not waiting is ignored. The wait lasts
+`PROFILE_CHOICE_WAIT` (10 minutes) from approval, never past the held token's
+`expires_at`, and replaces the device code's deadline for that login, so the poll's
+expiry check and the stale-login sweep in `_register_pending` read it: a login nobody
+picks for is forgotten on its next poll or the next begin, with no timer. The dashboard
+shows the profiles as a step of the sign-in (`components/KasProfileChoice.tsx`);
+`kirocrew kas login` never prompts and polls once more with `selected`, then names the
+profile it used. On an LTS build, picking a profile other than the one a running
+gateway started with is an account change and gets the existing account-changed answer.
 
 **Edition sign-in profiles (`crew_client` preview, default off, off on LTS).** While the
 preview is on, `auth/login/endpoints.edition_idc_profiles` asks the edition's
@@ -743,8 +776,9 @@ engine instead ([aws-control.md](aws-control.md)).
   vault still names that account, so a sign-in or sign-out from the dashboard
   or from `kirocrew kas login` / `kas logout` (`cli_kas_login.py`) turns it cold
   ([model-selection.md](../common/model-selection.md)). The dashboard drops its
-  own copy as well: the sign-out button (`pages/developer/KiroSignInCard.tsx`)
-  and the authorized sign-in (`components/KasLoginGate.tsx`) drop the browser's
+  own copy as well: the sign-out (`useKiroSignOut` in
+  `pages/developer/KiroSignInSources.tsx`, behind the card's Sign out and "Use
+  the Kiro CLI account") and the authorized sign-in (`components/KasLoginGate.tsx`) drop the browser's
   model-list caches (`clearCachedModels`, a reset of `['available-models']`),
   because that query is otherwise refetched only when a session spawns. The
   authorized sign-in also asks for a fresh credit reading
@@ -754,10 +788,12 @@ engine instead ([aws-control.md](aws-control.md)).
   back to re-reading the GET. It re-reads the Team Crews list
   (`RELAY_VIEWER_CREWS_KEY`) at once too, which otherwise holds its signed-out
   refusal for its 60 s poll.
-- The device-code screen (`DeviceWaiting`) does not open a browser: it shows the
-  verification URL as a link with a labelled Copy link beside it, and the user code
-  as large, selectable text with its own Copy code, so a host with no browser to
-  open (a Linux desktop, a remote gateway) can still finish. A Copy that reaches no
+- The device-code screen (`DeviceWaiting`) does not open a browser. On the
+  full-screen gate it shows the verification URL as a link with a labelled Copy
+  link beside it, and the user code as large, selectable text with its own Copy
+  code, so a host with no browser to open (a Linux desktop, a remote gateway) can
+  still finish. In card chrome (Settings and the sign-in dialog) it renders
+  `DeviceCodeCard` instead, whose code has no copy control (see below). A Copy that reaches no
   clipboard says Copied nowhere and shows an inline `ErrorNotice` under the steps
   ("Couldn't copy the code. Select it and copy it by hand.", or the link's form);
   the attempt keeps polling, and the next copy that works clears it.
@@ -883,8 +919,24 @@ engine instead ([aws-control.md](aws-control.md)).
   outlined and sit in a two-column grid, none accent-filled, because the detail's
   own primary button is "Use {{name}}", from
   `components.kiroPrerequisiteGate.use_agent`; in both chromes every provider
-  choice is a plain button with no caption under it) and adds a signed-in summary (provider,
-  expiry, renewability -- never a token) with sign-out and sign-in-again. It is
+  choice is a plain button with no caption under it). The tab is one centered
+  column (the tab sets `ownHeader` on its `SidePanelTab`, so `SidePanelLayout`
+  draws no title row and the column's own header is the page title) that shows
+  only what the state needs. Signed out: the Kiro ghost (`LookingGhost`, whose
+  eyes follow the pointer on desktop and stay still on a phone and under reduced
+  motion), "Sign in to Kiro", one line, and the choices in a column at most
+  320 px wide; the Credits card only when there is a real reading (sessions on
+  kiro-cli's own login still have a balance). Signed in: an account header (initials avatar,
+  the account's name as the title -- an e-mail blurred by default beside the
+  account popup's show/hide toggle -- "Signed in with <provider>", Switch
+  account and Sign out, neither red; gray placeholders while the name may still
+  arrive with the `['kiro-usage']` reading, `useSignedInAccount().pending`), then
+  the Credits card (`KiroCreditsCard`), whose no-reading state is one gray line
+  with a small Refresh; the card names the account itself unless the header
+  already does. A lapsed sign-in says so in the header, with Sign in
+  again as its one filled button, and the Credits card shows only for a real
+  reading. A live sign-in with no refresh token says, in one muted line, that it
+  cannot renew itself. Never a token. It is
   reachable from the chat error row an `AcpAuthRequired` turn produces
   (`chat_utils.AUTH_REQUIRED_KIND` → "Sign in to Kiro", navigating to
   `KIRO_SIGN_IN_PATH` = `/settings/kiro-account?highlight=key:kiro-sign-in`
@@ -954,10 +1006,18 @@ engine instead ([aws-control.md](aws-control.md)).
   In both places the choices are Google, GitHub and AWS Builder ID with their
   marks (`assets/google-mark.svg`, `assets/aws-mark.svg`, the shipped GitHub mark),
   then "or", then company SSO. Its device-code screen (`DeviceCodeCard`, card
-  chrome) shows one heading, an "Open sign-in page" button with a copy control,
-  the code with its own copy control, one waiting line with the expiry, and a back
-  arrow that returns to the choices: in the dialog header (`SignInBackContext`),
-  and beside the screen's heading in the Settings card, which has no such header.
+  chrome) is ONE component in both hosts: a heading ("Finish in your browser")
+  and a one-line hint, a full-width "Open sign-in page" button, a "Copy link" text
+  button under it, the code in a box the same width with no copy control (it is
+  only compared by eye, never typed), and one waiting line with the expiry. The
+  host takes the way back to the choices through `SignInBackContext`: the dialog
+  puts it in its header as a back arrow, Settings as "Use another way" above the
+  screen. The screen sets and clears that slot in layout effects, so the host's
+  header and back control change in the same paint as the screen, never one
+  frame later with the chooser's header. The one difference between the hosts is the slot's `ownsHeading`:
+  Settings sets it, because its centered header already says "Finish in your
+  browser" with its own hint, so the screen leaves its heading out; the dialog,
+  whose header says "Sign in to Kiro", leaves it unset and the screen draws it.
 - **The chat asks before a message fails.** `KiroSignInPrompt`, above the
   composer (`ComposerDockView`), shows one line and a Sign in button that opens
   `KiroSignInDialog` while

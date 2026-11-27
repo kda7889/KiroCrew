@@ -14,14 +14,17 @@ superseded-by: []
 
 # RFC: KAS engine sub-agents behind a default-off Feature Preview
 
-- Status: draft. Nothing on main follows it. Acceptance requested from a
-  maintainer. A maintainer records acceptance on this Status line, in the
-  `status` field and in the index row.
-- Implementation: draft
-  [#39781](https://github.com/kirodotdev/KiroCrew/pull/39781), which stays a
-  draft until this design is reviewed. It was read at its pushed head
-  `969c78233a` (two commits, `47b9f42e42` then `969c78233a`). Main was read
-  at `47edb00308`.
+- Status: draft. Acceptance requested from a maintainer. A maintainer records
+  acceptance on this Status line, in the `status` field and in the index row.
+- Implementation:
+  [#39781](https://github.com/kirodotdev/KiroCrew/pull/39781) merged on
+  2026-11-24 (`3dd52e1d7b`). Main now has the `kas_subagents` Feature Preview
+  (`dashboard.feature_previews`, read by
+  `acp/kas_engine_subagents.kas_subagents_preview_on`) and the
+  `kirocrew-helper` agent (`acp/kas_engine_subagent_target.KAS_HELPER_AGENT`).
+  This document was not re-audited against that merge: the marks below
+  describe the draft as it was read at its pushed head `969c78233a` (two
+  commits, `47b9f42e42` then `969c78233a`), with main read at `47edb00308`.
 - Three marks say where each statement was checked. **main**: on main at
   `47edb00308`. **head**: on #39781's pushed head `969c78233a`. **next**:
   decided, not on the pushed head, lands with the next update to #39781. A
@@ -190,7 +193,7 @@ as a move, and which name a tool call keeps for its hooks). Its body lists them.
 | The person's own agents, user-level and project-level, first 8 in name order | Run | **next** |
 | A person's agent file named `kirocrew-helper` | Never takes the helper's place; that chat keeps Kiro Crew's own sub-agents | **head**: `_HELPER_TAKEN` in `kas_engine_subagents.py` |
 | Kiro Crew's own agents | Refused by name, always | **head**: `deny_own_agents` |
-| An own agent with its own `preToolUse` hooks, a shell or file-write allowlist, or URL-scoped limits | Kept out and refused by name; `spawn_run` runs it with its limits | **head** for hooks and allowlists (`_GATE_ONLY` in `kas_subagent_targets.py`); **next** for URL-scoped limits and the by-name refusal |
+| An own agent with its own `preToolUse` hooks, a shell or file-write allowlist, or URL-scoped limits | Kept out and refused by name; `spawn_run` runs it with its limits | **head** for hooks, allowlists and blocked web addresses KAS cannot carry as a host deny (`_gate_only_limits` and `_GATE_ONLY` in `kas_subagent_targets.py`, `gate_refused_blocked` in `kas_spec_denies.py`); **next** for the other URL-scoped limits and the by-name refusal |
 | An own agent past the eighth | Refused; `spawn_run` runs it | **next** |
 
 The engine's own tool text lists every agent the engine finds, the refused
@@ -235,8 +238,13 @@ A `spawn_run` child on another agent, on KAS (**next**, all of it):
 
 ### 6. What the page shows (**next**)
 
-- A closed "Sub-agents in this turn" line under the reply, kept after a
-  reload: each child's agent, task, how it ended and its tool call titles.
+- The card a `spawn_run` wave's completion is drawn as, for the turn's engine
+  children: live at the foot of the chat while the turn runs, then under the
+  reply, kept after a reload. It says how many finished, the success and failure
+  counts, the batch's duration on Kiro Crew's clock and the turn's credits,
+  labelled as the whole turn's; Show details lists each child's agent, task, how
+  it ended, how long it ran and its tool call titles. KAS reports no credits,
+  model or time for one child, so the card shows none per child.
 - On an approval card for a child's call: which sub-agent asks, and the task
   that dispatch was given.
 - One row per running child in the bar above the composer.

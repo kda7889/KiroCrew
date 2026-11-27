@@ -69,7 +69,7 @@ from kiro_crew.mcp_cron_list_render import (
     _render_cron_list_full,
     _render_cron_list_json,
 )
-from kiro_crew.mcp_cron_tool_list import SERVER, _list_tools
+from kiro_crew.mcp_cron_tool_list import SERVER, _list_tools, _redeem_pickup
 from kiro_crew.mcp_cron_vet import (
     _command_cron_platform_refusal,
     _log_cron_denial,
@@ -1045,6 +1045,7 @@ def _call_tool_inner(name: str, args: dict[str, Any]) -> str:
                     strict_schedule=strict_schedule if isinstance(strict_schedule, bool) else False,
                     hide_in_chat=hide_in_chat if isinstance(hide_in_chat, bool) else False,
                     new_chat_per_run=new_chat_per_run,
+                    notify_only=args.get("notify_only") is True,
                     on_tab_close=args.get("on_tab_close", "resume"),
                     folder_id=folder_id,
                     chat_folder_id=chat_folder_id,
@@ -1495,6 +1496,7 @@ ADVERTISE_CALLER_IDENTITY = SERVER.advertise_caller_identity
 
 def run_mcp_server() -> None:
     """Run MCP stdio server — reads JSON-RPC from stdin, writes to stdout."""
+    _redeem_pickup()  # before the first request; a no-op once the early answers ran it
     run_mcp_stdio_loop(
         SERVER.name, SERVER.version, _list_tools, _call_tool, **SERVER.loop_options()
     )
@@ -1631,6 +1633,10 @@ if TYPE_CHECKING:  # names it serves from outside the family, from their homes
     )
     from kiro_crew.cron_history import (  # noqa: F401
         keep_ends,
+    )
+    from kiro_crew.cron_inflight import (  # noqa: F401
+        running_note,
+        running_since_by_job,
     )
     from kiro_crew.cron_service.model import (  # noqa: F401
         _ALERT_AFTER_DEFAULT,

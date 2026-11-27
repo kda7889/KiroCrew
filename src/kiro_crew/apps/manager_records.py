@@ -800,7 +800,7 @@ def _write_installed(
         # chokepoint runs on the boot re-registration of builtins, which reads back
         # ``installed.json`` -- a file a sandboxed shell can forge -- so minting from
         # ``enabled`` here would let a forged record plus a restart produce a real
-        # grant. The grant is written only from the owner-authenticated ``enable_app``.
+        # grant. Only an enable or an owner registration writes the grant.
         # No-op when no grant exists. See ``apps.host_exec_grants``.
         if not credential_free_meta.enabled:
             revoke_host_exec(name)
@@ -1189,8 +1189,9 @@ def _approved_grants_after_manifest_change(
     else:
         baseline = old_declared
     declared = _declared_grant_entries(new_permissions)
+    baseline_sets = {family: set(baseline.get(family, ())) for family in STAGED_GRANT_FAMILIES}
     return {
-        family: [e for e in declared[family] if e in set(baseline.get(family, ()))]
+        family: [e for e in declared[family] if e in baseline_sets[family]]
         for family in STAGED_GRANT_FAMILIES
     }
 
@@ -1202,14 +1203,12 @@ def _held_back_entries(
     declared = _declared_grant_entries(permissions)
     if approved is None:
         return {family: [] for family in STAGED_GRANT_FAMILIES}
-    return {
-        family: (
-            [e for e in declared[family] if e not in set(approved[family])]
-            if family in approved
-            else []
-        )
-        for family in STAGED_GRANT_FAMILIES
-    }
+    held: dict[str, list[str]] = {}
+    for family in STAGED_GRANT_FAMILIES:
+        # One set per family: a link-preview provider may list any number of hosts.
+        granted = set(approved[family]) if family in approved else None
+        held[family] = [] if granted is None else [e for e in declared[family] if e not in granted]
+    return held
 
 
 def _update_retired_tree_prefix(name: str) -> str:
@@ -1384,6 +1383,33 @@ def staged_app_grants(
     if _tree_swap_spanned(swap_before, _tree_swap_state(name)):
         return []
     return granted
+
+
+def held_back_app_grants(name: str, family: str, declared: Sequence[str]) -> list[str] | None:
+    """The *declared* ``permissions.<family>`` entries still waiting for the owner.
+
+    These are the entries the app detail page offers under "Approve new
+    permissions": declared, but outside the approved set. Read only to word a
+    refusal, never to grant. It lists nothing when nothing is known to be
+    waiting: no readable record, no stored set, or a set that predates the
+    family, because :func:`staged_app_grants` then withholds for another reason
+    or approves what is declared.
+
+    *declared* is what an earlier read of the manifest saw. ``None`` means the
+    app moved after that read: an update is swapping its tree, or the live
+    manifest declares other entries than *declared*, so the approved set read
+    here may not belong to it.
+    """
+    if _tree_swap_state(name)[0] or _update_in_progress(name):
+        return None
+    live = get_app_manifest(name)
+    if live is None or [e for e in getattr(live.permissions, family) if e] != list(declared):
+        return None
+    meta = _read_installed(name)
+    if meta is None:
+        return []
+    held = _held_back_entries(_effective_approved_grants(name, meta), {family: list(declared)})
+    return held.get(family, [])
 
 
 def _approved_grants_row(name: str) -> dict[str, Any]:

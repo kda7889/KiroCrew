@@ -48,8 +48,8 @@ from kiro_crew.dashboard.state import (
     note_new_worker,
     own_worker_member,
     read_worker_execution,
-    worker_cap_refusal,
 )
+from kiro_crew.mate_worker_conducts import effective_worker_cap_refusal, holds_conducting_kit
 from kiro_crew.sel import sel
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -280,6 +280,48 @@ def _revived_slot_refusal(slot: "_ChatSlot", caller_slot: "_ChatSlot") -> tuple[
 #: records do not confirm. Non-empty, so the slot stays FENCED (an agent made it), and it
 #: contains ``:``, so no slot key and no caller key can ever equal it.
 UNVERIFIED_CREATOR = "unverified:creator"
+
+
+def reconfirm_restored_creators(state: Any) -> int:
+    """Lift the restore fence from live slots whose creator the crew log now confirms.
+
+    On the loop, no I/O. A restart's restore judges each ``created_by`` claim once,
+    against the session tree as it stands then (``metadata_codec._read_created_by``).
+    When the tree does not hold the creation record yet, the worker is fenced as
+    :data:`UNVERIFIED_CREATOR`, and before this nothing judged it again: the Bot that
+    made it could not list, bind or revive it until the next restart. This re-asks the
+    same question on each tree change, with the same evidence (the crew log's creation
+    records, which no sandboxed process can write), so it widens nothing: a claim the
+    tree does not confirm, or names another creator for, stays fenced.
+
+    Only a slot the restore fenced carries a claim (``_unconfirmed_creator``). A slot
+    whose ``_created_by`` was set some other way since is left alone and loses the
+    claim. A lifted fence also gives the slot the thread-born mark the restore would
+    have given it had the tree held the record then (``members.note_worker_lineage``,
+    from the creator the record names). Returns how many fences were lifted.
+    """
+    # Circular at runtime: ``members`` imports this module.
+    from kiro_crew.members import note_worker_lineage
+
+    lifted = 0
+    for slot in list(getattr(state, "_slots", {}).values()):
+        claimed = str(getattr(slot, "_unconfirmed_creator", "") or "")
+        if not claimed:
+            continue
+        if getattr(slot, "_created_by", "") != UNVERIFIED_CREATOR:
+            slot._unconfirmed_creator = ""
+            continue
+        if _creation_parent(slot.key) != claimed:
+            continue
+        slot._created_by = claimed
+        slot._unconfirmed_creator = ""
+        note_worker_lineage(slot.key, claimed)
+        lifted += 1
+        logger.info(
+            "session %s: creator %s confirmed by the session tree after restore", slot.key, claimed
+        )
+    return lifted
+
 
 #: Rebinds started on a cancelled revive, held so the loop does not drop them.
 _PENDING_REBINDS: "set[asyncio.Task[None]]" = set()
@@ -642,6 +684,13 @@ async def revive_session(
                 built._created_by = claimed_creator
             else:
                 built._created_by = UNVERIFIED_CREATOR
+        # The thread-born mark from the same verified creator a restart reads it
+        # from (``metadata_codec._read_created_by``), so a worker the Bot's thread
+        # opened is thread-born again after a revive whether or not the gateway
+        # restarted since it was archived; an unverified claim marks nothing.
+        from kiro_crew.members import note_worker_lineage
+
+        note_worker_lineage(built.key, str(getattr(built, "_created_by", "") or ""))
         # Charge the reviver for this slot under the per-caller cap (see
         # ``creator_slot_count``) without touching its ownership. Set before the
         # ceilings are read so the count includes this slot once published.
@@ -675,7 +724,10 @@ async def revive_session(
             return ResumeRefusal(f"slot cap reached ({MAX_LIVE_SLOTS})", "slot_cap_reached", 409)
         if (cap_reason := creator_slot_cap_refusal(state, caller_key)) is not None:
             return ResumeRefusal(cap_reason, "creator_slot_cap_reached", 409)
-        if (worker_reason := worker_cap_refusal(state, revived_execution[0])) is not None:
+        # A conducting worker that revives keeps the bound its own start gave it.
+        caller_conducts = holds_conducting_kit(state, live_caller)
+        worker_reason = effective_worker_cap_refusal(state, revived_execution[0], caller_conducts)
+        if worker_reason is not None:
             return ResumeRefusal(worker_reason, "bot_worker_cap_reached", 409)
         note_new_worker(built.key, revived_execution[0])
         from kiro_crew.dashboard.approval_inheritance import (

@@ -302,9 +302,12 @@ async def frontend_dist(tmp_path, monkeypatch):
     monkeypatch.setattr(startup.srv, "_DIST_DIR", dist)
     monkeypatch.setattr(startup.srv, "warm_own_host_names", lambda: None)
     monkeypatch.setattr(token_auth, "_APP_WINDOW_EXCLUDED_PATHS", frozenset())
+    earlier = set(dist_file_response._PENDING_CLOSES)
     yield files
-    # File responses close on the static pool after sending their last byte.
-    await asyncio.wait_for(asyncio.gather(*dist_file_response._PENDING_CLOSES), timeout=30)
+    # File responses close on the static pool after sending their last byte. Wait only
+    # for this test's: a close left by an earlier test whose loop has ended never finishes.
+    ours = dist_file_response._PENDING_CLOSES - earlier
+    await asyncio.wait_for(asyncio.gather(*ours), timeout=30)
 
 
 @pytest.mark.asyncio
@@ -781,10 +784,26 @@ async def test_live_get_routes_never_return_a_headless_dashboard(
                 assert shell.await_count > 0
 
 
-def test_the_printed_credential_command_names_the_bound_port(capsys) -> None:
-    """A gateway started with ``--port`` prints a command that reaches that port."""
-    print_client_access(7001)
+@pytest.mark.parametrize(
+    ("entry_port", "entry_line"),
+    [
+        (None, ""),
+        (0, "   Entry port: off\n"),
+        (
+            8443,
+            "   Entry port: 127.0.0.1:8443\n"
+            "   On the entry port the proxy must send a Host that names 127.0.0.1, [::1] or"
+            " localhost\n",
+        ),
+    ],
+)
+def test_the_printed_credential_command_names_the_bound_port(
+    capsys, entry_port, entry_line
+) -> None:
+    """Startup shows entry status; callers without it keep the API and credential lines."""
+    print_client_access(7001, entry_port)
     assert capsys.readouterr().out == (
         "👻 Headless: API on http://127.0.0.1:7001/v1\n"
+        f"{entry_line}"
         "   Credential for a Crew API client: kirocrew token --bearer --port 7001\n"
     )

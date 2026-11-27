@@ -128,7 +128,7 @@ produces exactly those silent failures, which is why the helper is named per cal
 | Read Linux process name | `linux_process_name(pid)`; exact kernel `comm`, `None` off Linux or on an unreadable/empty value. Fixture tests may pass `proc_root=`. | reading `/proc/<pid>/comm` outside the compatibility layer |
 | Compare process cgroups | `process_cgroups_match(pid, reference_pid)`; compares stable unified cgroup v2 membership and returns `None` off Linux, on cgroup v1, on unreadable/changing membership, or when identity is otherwise inconclusive. Fixture tests may pass `proc_root=`. | comparing one `/proc/<pid>/cgroup` read without stability rechecks |
 | Process start time (PID-reuse guard) | `process_start_time(pid)` | `/proc/<pid>/stat` / `ps -o lstart=` (both answer `None` on Windows, so the guard silently never confirms) |
-| This process's effective uid, to derive a per-user path from (`/run/user/<uid>/bus`) | `effective_uid()`: `os.geteuid()` on POSIX, `None` on Windows, which has no uid; a caller reads `None` as "no such path on this platform" (`github_runner._user_bus_socket_candidates` then offers no uid-derived candidate and the provider CLI child gets no `DBUS_SESSION_BUS_ADDRESS` at all) | `os.geteuid()` / `os.getuid()` reached directly (neither exists on Windows, so the import-time or call-time `AttributeError` takes the whole builder down); formatting a guessed uid into the path |
+| This process's effective uid, to derive a per-user path from (`/run/user/<uid>/bus`) | `effective_uid()`: `os.geteuid()` on POSIX, `None` on Windows, which has no uid; a caller reads `None` as "no such path on this platform" (`github_runner._user_bus_socket_candidates` then offers no uid-derived candidate and the provider CLI child gets no `DBUS_SESSION_BUS_ADDRESS` at all; `unchanged_file.already_holds` compares it with a file's owner and reads `None` as "not this user's file", so the write goes ahead) | `os.geteuid()` / `os.getuid()` reached directly (neither exists on Windows, so the import-time or call-time `AttributeError` takes the whole builder down); formatting a guessed uid into the path |
 | Is this pid a PROCESS rather than a thread | `is_thread_group_leader(pid)` for one pid; `live_thread_group_leaders()` once for a whole sweep | `pid_exists(pid)` alone (Linux numbers threads from the pid space and POSIX permits signalling a tid, so a pid recycled as a THREAD of an unrelated process reads as alive forever). Both answer `None`, never `False`, when unknowable — treat `None` as "retain", never as licence to act |
 | Signals | `platform_compat.SIGKILL` / `SIGTERM` | `signal.SIGKILL` (undefined on Windows) |
 | Spawn isolation | `start_new_session=IS_POSIX` + `creationflags=CREATE_NEW_PROCESS_GROUP` | bare `start_new_session=True` |
@@ -185,7 +185,7 @@ produces exactly those silent failures, which is why the helper is named per cal
 | macOS kernel memory pressure | `memory_pressure_level()`: `kern.memorystatus_vm_pressure_level` through `sysctlbyname` on the cached `_darwin_sysctl_handle()`, in-process (built once under a lock, both prototypes declared before the handle is published, so a concurrent first call never reads None). It answers `MEMORY_PRESSURE_NORMAL` (1), `MEMORY_PRESSURE_WARN` (2) or `MEMORY_PRESSURE_CRITICAL` (4): XNU's `NOTE_MEMORYSTATUS_PRESSURE_*`, the same values as libdispatch's `DISPATCH_MEMORYPRESSURE_*`, with the kernel's internal "urgent" level reported as WARN. `memory_pressure_name(level)` renders it. `None` off macOS and on any failure (no libc, a failed call, a wrong-size answer, an unknown value), and a caller fails open on `None`. The level is the kernel's lagging verdict (subagent.md, *macOS: the kernel memory-pressure hold*): use it as a backstop beside a figure, never as one | a `sysctl` subprocess (the app sandbox can deny the spawn, and callers run on the event loop); a fresh `CDLL` per read; treating the level as a measure of free memory, or a NORMAL reading as proof the host has room |
 | FD soft limit | `raise_nofile_soft_limit(n)` | `resource.setrlimit` |
 | Port to PID | `find_listening_pids(port)` / `listening_pid_tool_available()`; `find_port_listeners(port)` when ownership must be scoped to the local address actually probed; `probe_port_listeners(port)` when completed-empty must be distinguished from timeout or execution failure; `process_owns_loopback_listener(pid, port)` for per-process ownership through Linux procfs (listener inodes from a `NETLINK_SOCK_DIAG` LISTEN dump in `sock_diag.py` for the host's own `/proc`, `/proc/net/tcp{,6}` when that query fails), PID-scoped `lsof`, or Windows `GetExtendedTcpTable` owner-PID tables, and `process_owns_port_listener(pid, port)` for the same question without the loopback filter (any LISTEN socket the pid holds on the port; Windows answers `None`). Prefer them over `find_listening_pids` when the pid to prove is already known: it never runs a system-wide `lsof` | `lsof` or `netstat` directly |
-| Spawn a system tool (`ps`, `lsof`, `netstat`, `taskkill`) | `trusted_system_bin(name)`, treating `None` as "unavailable" | a bare argv name (resolved through a `PATH` that can lead with same-uid-writable dirs) |
+| Spawn a system tool (`ps`, `lsof`, `netstat`, `taskkill`) | `trusted_system_bin(name)`, treating `None` as "unavailable". `test/test_host_introspection_trusted_bin.py` fails any gateway spawn of `ps`, `pgrep`, `sysctl`, `vm_stat` or `netstat` by bare name (skill scripts, which the agent runs in its sandbox, are outside it) | a bare argv name (resolved through a `PATH` that can lead with same-uid-writable dirs), or `shutil.which(name)` first with a fixed path as the fallback (the same `PATH` lookup) |
 | Resolve a system tool on the event loop (a periodically refreshed capability probe) | `trusted_system_bin_quiet(name)`: the same fixed-directory lookup with no miss diagnostic, reporting a miss in the caller's own words | `trusted_system_bin`, whose miss diagnostic walks `PATH` with `shutil.which` and can hang on an entry on a stalled mount |
 | Decide whether an executable's PATH can be trusted (ownership, mode bits, writability by some account) | `traversed_components(path)` for the ENUMERATION, then the site's own predicate over every entry. It resolves the path COMPONENT BY COMPONENT, expanding each symlink it meets, and returns every directory the walk actually reads — the original spelling's side, each hop's side and the target's side — plus the final target, root-first, each once; `None` on `OSError` or past `_MAX_SYMLINK_HOPS`, which every caller treats as a refusal. `traversed_components_and_links(path)` is the same walk returning `(components, links)`, where `links` names each symlink it expanded, spelled under a directory `components` names: a question that admits a sticky directory needs their owners too, because an account that may write a sticky directory replaces only its own entries there. The trust QUESTION stays with the caller, because the sites ask different ones and must keep asking them: `_is_root_owned_path` (`trusted_aws_bin`: root's alone to change), `github_runner.validate_provider_executable` POSIX branch (not another uid's, not world-writable unless sticky; strict mode root-owned and unwritable; its multicall-link rule, Linux-only because elsewhere an ACL can grant write the mode bits do not show, reads `traversed_components_and_links`, since it admits sticky directories), `service.apparmor._substitutable_by_others` (no `0o022` bit, no third-account owner). Windows branches keep their ACL-driven lexical chains; the walker is `os.sep`-rooted and does not model drive anchors or junctions | `realpath` and then `.parents` / `os.path.dirname` (collapses the chain, so a hop through writable space — `gh -> /tmp/link -> /usr/bin/gh` — is never stat'd); a lexical `.parents` walk over the spelling as given (`os.stat` follows symlinks and `dirname` does not, so for `/usr/local/bin -> /opt/x/bin` the target's parent `/opt/x` is never visited); or walking BOTH endpoints' lexical chains (still names no hop in the middle). Adding another spelling of the walk for a new site |
 | Decide whether a group write bit admits an account other than this one | `group_write_admits_another_account(path, gid)` with the path's `st_gid`: the one question every check crediting a group write bit to its owner asks, so one directory gets one answer (`cloud.source._first_replaceable` for the chain holding a staged source tarball, `github_runner._who_can_change` for what a provider CLI link's path reads). `None` means the bit admits this account alone. It reads the POSIX access ACL first (`_acl_admits_another_account`): with an extended ACL the group bits are its MASK, so a named entry can write behind a bit that looks private; only an EFFECTIVE write counts (entry AND mask), a named user that is this account or root is trusted, and a named group gets the membership question. No ACL API (macOS, BSD) or no ACL leaves the mode bits as the test; any other read failure or an unrecognised value fails closed. Then the membership (`_group_shared_with_another_account`): `gr_mem` of every group entry carrying the gid (`getgrgid` returns one, and a second entry from `groupadd -o` grants the gid to its own members), plus a passwd enumeration that must contain this account. Any other answer is a noun phrase naming whom the bit may admit, for an operator-facing message; anything unreadable is such an answer, never `None`. POSIX only: on Windows the staging walk reads the ACL instead, and the link rule runs only on Linux | counting every group write bit as a foreign writer (a user-private group's bit is the owner's own); reading the bit as the owning group's permission without reading the ACL; refusing every ACL (a read-only entry or a default-only ACL lets no one else write); trusting `gr_mem` alone (an account whose primary group it is never appears there), `getgrgid`'s one entry, or a passwd enumeration that does not contain this account; a check asking one half, or its own copy of the question |
@@ -532,7 +532,8 @@ loop-stall watchdog exits the gateway.
 
 `platform_compat_offloop_spawn` splits the transport build in two:
 
-1. A worker on `spawn_executor()` (a bounded `mc-spawn` pool) builds the `Popen`:
+1. A worker on `spawn_executor()` (a bounded `mc-spawn` pool whose `submit` only
+   enqueues, see [below](#the-loops-thread-pools-never-wait-on-a-worker-start)) builds the `Popen`:
    `CreateProcess` plus the overlapped pipe handles. No loop state is touched.
 2. On the calling loop, a subclass of the stock transport whose `_start` is the
    interpreter's own `_start` with its `windows_utils.Popen` lookup answered by
@@ -547,7 +548,8 @@ spawn waits for it, adopts any child it built and tears it down with `close()` t
 `_wait()`, exactly as a cancellation at the stock `await waiter` does. When the
 worker's build fails after such a cancellation, the spawn still raises
 `CancelledError` (chained from the build error) so the caller's cancel is not
-turned into an ordinary spawn failure.
+turned into an ordinary spawn failure; so does a cancelled spawn whose pool could
+not start a worker for it (no child exists then).
 
 Both gateway entry points (`cli.main`'s gateway command and `gatewayd.main`) pass
 `gateway_loop_factory()` to `asyncio.run`. On Windows it returns
@@ -595,6 +597,82 @@ loop turning; cancellation reaps; the fallback logs once) and
 `test/test_fork_free_spawn.py` (no fork start inside the scope; cwd, session and
 inherited-descriptor closing match `Popen`'s; the scope is per task; the manifest
 fan-out opens it).
+
+## The loop's thread pools never wait on a worker start
+
+CPython's `ThreadPoolExecutor.submit` holds `concurrent.futures.thread._global_shutdown_lock`,
+one lock for every pool in the process, while it starts a worker, and `Thread.start()`
+waits for the new thread to run. On a Windows host near its commit limit a start takes
+seconds, so every other thread's `submit` waits on that lock, an idle worker
+notwithstanding, and a pool with no idle worker starts the new one on the caller's
+thread. The loop thread submits to the default executor (`asyncio.to_thread`,
+`run_in_executor(None, ...)`, the loop's `getaddrinfo`), to `spawn_executor()` for
+every child built off the loop as above, and to the thread pools `kiro_crew.executors`
+builds (`subprocess_executor()`, `discovery_executor()`, `maintenance_executor()`,
+`crew_log_executor()` and the rest).
+
+All of them are `enqueue_only_pool.EnqueueOnlyThreadPoolExecutor`
+(`configure_default_executor` installs it as the default executor). Its `submit` takes
+only the pool's own lock, never one held across a `Thread.start()`, and puts the call
+on `_work_queue`. Building a pool starts its first worker and then one grower thread,
+both on the building thread (a shared pool's getter in `kiro_crew.executors` holds
+`executors._lock` across them, once per pool; `memory_preparation_executor()` builds a
+fresh pool per call), so a pool always has a worker and only growth waits on the
+grower, which starts the rest up to the cap. A slow start therefore delays only work
+waiting for a new worker, and the running workers keep taking work. A first worker the
+host refuses to start (thread or commit exhaustion) raises its error to the builder,
+so from the getter where the caller submits, as the stdlib's first `submit` raised it
+to the same caller, and nothing of the pool is kept; the next getter call builds it
+again. A refused growth start leaves the queue to the running workers, and the next
+`submit` asks again. It subclasses `ThreadPoolExecutor` because
+`loop.set_default_executor` accepts nothing else, and keeps `_work_queue` because
+`turn_timing` and `cron_queue_depth()` read its depth. Its threads are daemons:
+`shutdown()` stops them with one sentinel (and `cancel_futures` cancels queued work),
+and a pool dropped without a shutdown stops them through a weak reference. A call
+queued before `shutdown()` still runs. `shutdown(wait=True)` joins the grower before
+the workers, so it returns only once every worker it started has finished.
+
+At interpreter exit every such pool's work is joined as the stdlib joins its own
+pools', so queued and running work (an update apply, a crew-log or memory store write)
+still finishes. One hook does it, registered at import through
+`threading._register_atexit`, the private function the stdlib registers its own exit
+hook (`_python_exit`) with. It makes every pool refuse new work from then on, as the
+stdlib's pools refuse it after interpreter shutdown, shuts every pool registered by
+then down behind its queued work, joins each grower, then puts a stop behind each
+recorded worker's queue and joins every worker recorded by then: workers are recorded
+with their queue, apart from their pool, as the stdlib records its own, so a pool
+already shut down without `wait` and dropped (the default executor after
+`loop.close()`, the per-pass memory-preparation pool) still has its running work
+joined. A pool first built while the hook runs takes no work, so its idle daemon
+threads end with the interpreter. Those hooks run in reverse order of registration and
+this module registers after `concurrent.futures.thread`, so this hook runs just before
+the stdlib's, while stdlib pools still accept work, and both run before the non-daemon
+threads are joined and before `atexit`. `shutdown_maintenance_executor()`, the
+`atexit` handler of the `kiro_crew.executors` pools, therefore still finds nothing
+queued to cancel, as it did after the stdlib's hook. The gateway itself leaves through
+`os._exit` (`slack/gateway_runtime/exit_path.py`; `platform_compat.hard_exit` on a
+forced exit), which runs neither hook, so this governs the processes that exit
+normally: CLI commands, child processes and tests.
+
+Every other pool keeps the stdlib executor: those built outside `kiro_crew.executors`
+(the spawn pool aside) and the two inside `subprocess_pool.SubprocessPoolExecutor`. A
+loop-thread `run_in_executor` on one of them still takes the process-wide lock.
+
+The guards are `test/test_loop_thread_pool_lock.py` (with that lock held by another
+thread, `asyncio.to_thread`, a gateway-loop `create_subprocess_exec` (the child's exit
+status arrives, on the Windows CI shards through a real Proactor loop) and a
+loop-thread `run_in_executor` on every `kiro_crew.executors` pool complete; a built
+pool's getter returns while another thread holds `executors._lock`, as a first build
+does across its starts), `test/test_executors.py` (a getter whose first worker cannot
+start raises, and the next call builds the pool), `test/test_push_branch_gate.py`
+(the push-allow audit is written inline when the maintenance pool cannot start a
+worker) and `test/test_enqueue_only_pool.py` (`submit` returns while a growth start is
+held; a refused first start raises where the pool is built; a refused growth start
+leaves the call to the running worker; a spawn whose pool cannot be built raises the
+start error; cap, results and errors; cancel and shutdown; a worker counts as idle
+once; a dropped pool's threads stop; at a normal interpreter exit a running call and a
+queued call on a live pool, and a running call on a pool shut down without `wait` and
+dropped, all finish, and a pool built while the hook runs refuses its submit).
 
 ## Windows session-tree teardown
 
@@ -732,10 +810,13 @@ not lost: its pins stay in the pending state, and the maintenance sweep resumes 
 drain from the members already confirmed. A slow host meets this routinely,
 because each member's pass costs two identity reads and two Toolhelp snapshots.
 `AcpRuntime` therefore logs it as one WARNING line, not a traceback, and still
-raises. A failed kiro session setup logs its original failure at WARNING before the
-cleanup kill, redacted and folded to one bounded printable line, because that text
-can come from the backend. Without that line, the cleanup's own output would be
-the only trace of a repeating setup failure.
+raises. The supervisors' reaper kill (`process_identity.kill_verified_process`)
+logs it as one WARNING line too, not an ERROR, and still records the run's kill as
+failed; every other drain failure there stays an ERROR. A failed kiro session
+setup logs its original failure at WARNING before the cleanup kill, redacted and
+folded to one bounded printable line, because that text can come from the
+backend. Without that line, the cleanup's own output would be the only trace of a
+repeating setup failure.
 
 This does not reconstruct an intermediary that exited before any available
 handle observed it, and the completeness a successful drain asserts is therefore

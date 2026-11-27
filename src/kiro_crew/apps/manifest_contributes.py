@@ -653,9 +653,6 @@ class PanelTabConfig:
 #: provider, and a link matches the FIRST provider whose hosts list it, so a second
 #: provider in the same app would only ever shadow or be shadowed by the first.
 MAX_LINK_PREVIEWS_PER_APP = 1
-#: Host patterns per provider. Bounded because the detector tests every hovered link
-#: against every pattern of every enabled app.
-_MAX_LINK_PREVIEW_HOSTS = 64
 #: Plain-text patterns per provider, and the longest pattern source. Every pattern
 #: of every enabled app scans every rendered chat message, so both are small. The
 #: dashboard refuses a pattern whose backtracking it cannot bound before it ever
@@ -766,7 +763,7 @@ class LinkPreviewConfig:
             errors.append(f"{where}: id must be a storage-safe slug ({self.id!r})")
         if not self.entry:
             errors.append(f"{where}: missing entry")
-        errors.extend(host_list_errors(where, self.hosts, self.bad_hosts, _MAX_LINK_PREVIEW_HOSTS))
+        errors.extend(host_list_errors(where, self.hosts, self.bad_hosts, None))
         if self.bad_full_url:
             errors.append(f"{where}: fullUrl must be true or false")
         if self.bad_text_patterns:
@@ -1558,6 +1555,16 @@ class Contributes:
     memoryProviders: MemoryProvidersConfig = field(  # noqa: N815
         default_factory=MemoryProvidersConfig
     )
+    #: MCP servers this app offers to a Bot's own chat (``kiro_crew.bot_chat_app_tools``):
+    #: each ``{"agent", "server"}`` names a server one of the app's own agents declares.
+    #: Nothing mounts from this alone: the owner approves the ``tools`` Bot scope and
+    #: ticks the Bot (``apps.bot_grants``).
+    #: shortcut: the entry is read from that agent's rendered spec, so the app keeps an
+    #: agent that declares it; move to a top-level declaration that no ordinary session
+    #: mounts once an app needs a server with no agent of its own.
+    botChatServers: list[dict[str, str]] = field(default_factory=list)  # noqa: N815
+    #: ``botChatServers`` present but not a list of ``{agent, server}`` strings. Not serialized.
+    bad_bot_chat_servers: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {}
@@ -1595,6 +1602,8 @@ class Contributes:
             d["linkOpen"] = kept_opens
         if self.memoryProviders.providers:
             d["memoryProviders"] = self.memoryProviders.to_list()
+        if self.botChatServers:
+            d["botChatServers"] = [dict(s) for s in self.botChatServers]
         return d
 
     @classmethod
@@ -1636,7 +1645,20 @@ class Contributes:
         composer_entries = composer_raw if isinstance(composer_raw, list) else []
         opens_raw = data.get("linkOpen", [])
         open_entries = opens_raw if isinstance(opens_raw, list) else []
+        chat_raw = data.get("botChatServers", [])
+        chat_servers = [
+            {"agent": s["agent"], "server": s["server"]}
+            for s in (chat_raw if isinstance(chat_raw, list) else [])
+            if isinstance(s, dict)
+            and isinstance(s.get("agent"), str)
+            and isinstance(s.get("server"), str)
+            and s["agent"]
+            and s["server"]
+        ]
         return cls(
+            botChatServers=chat_servers,
+            bad_bot_chat_servers="botChatServers" in data
+            and (not isinstance(chat_raw, list) or len(chat_servers) != len(chat_raw)),
             messageActions=[
                 MessageActionConfig.from_dict(a) for a in action_entries if isinstance(a, dict)
             ],
@@ -1869,6 +1891,11 @@ class Contributes:
         for link_open in self.linkOpen:
             errors.extend(link_open.validate())
         errors.extend(self._validate_selection_actions())
+        if self.bad_bot_chat_servers:
+            errors.append(
+                "contributes.botChatServers must be an array of {agent, server} "
+                "objects with non-empty string values"
+            )
         return errors
 
     def _validate_selection_actions(self) -> list[str]:

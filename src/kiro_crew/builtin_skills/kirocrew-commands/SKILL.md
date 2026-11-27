@@ -67,7 +67,7 @@ Signs in and runs without kiro-cli: `kas` installs Kiro Crew's own engine bundle
 | `kirocrew gateway --seed-replace` | Wipe a non-empty target home and re-seed it (paired with `--seed`) |
 | `kirocrew gateway --no-tunnel` | Never publish a tunnel for this process's whole life, whatever `tunnel.enabled` says. Scoped to TUNNELS: it does not change where the dashboard binds |
 | `kirocrew gateway --json-ready` | Print one `KIROCREW_READY:{...}` line (port, token, pid, KIROCREW_HOME) once the dashboard is bound |
-| `kirocrew gateway --test-mode` | Alias for `--port auto --no-open --json-ready --approval reads` |
+| `kirocrew gateway --test-mode` | Alias for `--port auto --no-open --json-ready --no-tunnel --approval reads` |
 | `kirocrew stop` | Stop a running gateway |
 | `kirocrew stop --port 9999` | Stop gateway on specific port |
 | `kirocrew restart` | Restart gateway (service-aware) |
@@ -75,6 +75,7 @@ Signs in and runs without kiro-cli: `kas` installs Kiro Crew's own engine bundle
 | `kirocrew usage` | Recent credit spend per day; `--by model\|agent\|channel\|session`, `--days N` / `--since YYYY-MM-DD`, `--json` |
 | `kirocrew trace show KEY` | Print one traced turn as a waterfall of its model calls, tool calls and sub-agents, read from the local span files (written while `telemetry.traces_enabled` is on); `KEY` is a turn id, session key or id, ACP session id or trace id |
 | `kirocrew gateway-pid` | Print the PID holding this home's gateway lock (JSON) |
+| `kirocrew mcp reload SERVER` | Reload one MCP server's running processes without a restart: idle ones stop now, busy ones finish first (`SERVER` is its `mcp.json` name or slash-free alias) |
 | `kirocrew open SESSION` | Open the desktop app on a session through a `kirocrew://` deep link (`SESSION` is the `?sid=` value in the dashboard URL); `--print` shows the URL and opens nothing |
 
 The token in a `--json-ready` line grants dashboard access for up to 20 hours, so
@@ -86,6 +87,7 @@ transcripts.
 | Command | Description |
 |---------|-------------|
 | `kirocrew service install` | Install and start as system service (sudo on Linux) |
+| `kirocrew service install --headless` | Same, with no dashboard and loopback only; a later `service install` keeps it, `--no-headless` drops it |
 | `kirocrew service uninstall` | Stop and remove system service (Linux: both system and per-user unit, each scope reported) |
 | `kirocrew service status` | Show service status (systemctl/launchctl; Linux: system and per-user unit, each named) |
 | `kirocrew logs` | Show gateway logs (last 100 lines) |
@@ -96,7 +98,8 @@ transcripts.
 ## Pods (Isolated Worktree Test Instances)
 
 Read `references/pods-and-browsing.md` for every `kirocrew pod` command (up,
-down, ls, status, logs, provision, install, token, restart, exec, api, prune).
+down, ls, status, logs, provision, install, token, restart, exec, api, prune,
+url, scenarios).
 
 ## Dashboard Access
 
@@ -127,8 +130,8 @@ type a reply to the agent instead. Anything else denies.
 
 ## Browsing (`browser` MCP tool)
 
-Read `references/pods-and-browsing.md` for the `browser` tool's actions and the
-`kirocrew browser` commands.
+Read `references/pods-and-browsing.md` for the `browser` tool's actions.
+Browsing is not a `kirocrew` subcommand.
 
 ## Autonomous Task Runner
 
@@ -213,6 +216,7 @@ A session subscribes with the `resource_subscribe` MCP tool once `mcp_gateway.re
 | `kirocrew memory import file.json` | Import memory from JSON |
 | `kirocrew memory import --store <name> file.json` | Import into a named store instead |
 | `kirocrew memory import-text notes.md` | Offer the facts in a text or Markdown file and save the ones you confirm |
+| `kirocrew memory import-text --store <name> notes.md` | Offer and save them into a named store instead |
 | `kirocrew memory migrate` | Migrate legacy markdown memory to vector store |
 | `kirocrew memory backup [--keep N]` | Back up active memory stores now |
 | `kirocrew memory backups [--store <name>]` | List memory backups, newest first |
@@ -312,6 +316,24 @@ Read `references/cloud-network-desktop.md` for the tailnet commands.
 ## Computer Use (Desktop Automation)
 
 Read `references/cloud-network-desktop.md` for the computer-use commands.
+
+## Connected Computers (feature preview, Linux only)
+
+Share a folder on this computer with a remote gateway. Off unless
+`dashboard.feature_previews.connected_computers` is on. Some commands run on
+the remote gateway (called over SSH), others on the computer that shares.
+
+| Command | Description |
+|---------|-------------|
+| `kirocrew connected-computer status [--json]` | (this computer) list its grants |
+| `kirocrew connected-computer off` | (this computer) turn off every grant now |
+| `kirocrew connected-computer reset-protection` | (this computer) start over after the OS keyring lost this computer's key |
+| `kirocrew connected-computer desktop-host` | (this computer) the desktop app's local controller, on stdin/stdout only |
+| `kirocrew connected-computer devices [--json]` | (remote gateway) list enrolled computers |
+| `kirocrew connected-computer revoke DEVICE_ID` | (remote gateway) refuse a computer's credentials |
+| `kirocrew connected-computer remove DEVICE_ID` | (remote gateway) retire a computer; its files are untouched |
+| `kirocrew connected-computer enroll --stdin` | (remote gateway, over SSH) enroll the calling computer |
+| `kirocrew connected-computer forget --stdin` | (remote gateway, over SSH) revoke the calling computer |
 
 ## Snapshot & Restore
 
