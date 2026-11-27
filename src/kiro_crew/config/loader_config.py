@@ -132,6 +132,7 @@ from kiro_crew.config.sections import (
     coerce_effort,
     normalize_agent_model,
 )
+from kiro_crew.config.sections_max import MaxConfig
 from kiro_crew.effort import is_valid_effort, model_supports_effort
 
 logger = logging.getLogger("kiro_crew.config.loader")
@@ -310,6 +311,9 @@ class KiroCrewConfig:
     wecom: WeComConfig = field(
         default_factory=WeComConfig,
         metadata=_meta("WeCom", "WeCom (企业微信) AI-bot integration settings.", tags=["wecom"]),
+    )
+    max: MaxConfig = field(
+        default_factory=MaxConfig, metadata=_meta("MAX", "Owner-only MAX channel.")
     )
     telegram: TelegramConfig = field(
         default_factory=TelegramConfig,
@@ -760,6 +764,7 @@ class KiroCrewConfig:
             "memory": asdict(self.memory),
             "slack": asdict(self.slack),
             "publish": asdict(self.publish),
+            "max": asdict(self.max),
             "telegram": asdict(self.telegram),
             "discord": asdict(self.discord),
             "webex": asdict(self.webex),

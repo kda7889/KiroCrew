@@ -20272,6 +20272,16 @@
       "uptime": "Tempo attivo"
     },
     "settings": {
+      "maxPanel": {
+        "guide": "Aggiungi il token del bot in Impostazioni → Segreti, poi attiva MAX.",
+        "pair": "Associa proprietario",
+        "paired": "Proprietario associato: {{id}}",
+        "inactive": "MAX non è attivo. Controlla le impostazioni e i segreti.",
+        "code_hint": "Il codice scade tra cinque minuti. Invia questo comando al bot in una chat privata.",
+        "subscribe": "Registra webhook",
+        "subscribed": "Webhook registrato. La consegna non è ancora stata verificata.",
+        "subscription_hint": "Usa l’indirizzo HTTPS delle impostazioni. Registra di nuovo dopo aver cambiato il segreto del webhook."
+      },
       "mobileLoginCard": {
         "sign_in_on_mobile": "Accedi da dispositivo mobile",
         "create_a_one_time_link_for_mobile_or_another_browser": "Crea un link di accesso di breve durata per un dispositivo mobile o un altro browser. Scade tra 5 minuti.",

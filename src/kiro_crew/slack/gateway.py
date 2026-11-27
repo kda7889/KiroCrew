@@ -1214,6 +1214,7 @@ class GatewayOrchestrator:
     run = _boot.run
     # gateway_runtime/channel_boot.py
     _hoist_wecom = _channel_boot._hoist_wecom
+    _hoist_max = _channel_boot._hoist_max
     _hoist_telegram = _channel_boot._hoist_telegram
     _hoist_weixin = _channel_boot._hoist_weixin
     _hoist_whatsapp = _channel_boot._hoist_whatsapp

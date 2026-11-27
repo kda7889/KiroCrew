@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 445" role="img" aria-label="MAX owner pairing, descriptive BPMN">
+<defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0 0L7 3L0 6Z" fill="#334155"/></marker></defs>
+<rect width="1280" height="445" fill="white"/><g font-family="sans-serif" font-size="13" stroke="#334155" fill="#172554">
+<rect x="20.0" y="25.0" width="1230.0" height="130.0" fill="#f8fafc"/><text x="28.0" y="41.0" stroke="none">Host owner</text>
+<rect x="20.0" y="155.0" width="1230.0" height="265.0" fill="#f8fafc"/><text x="28.0" y="171.0" stroke="none">Gateway</text>
+<circle cx="73.0" cy="93.0" r="18.0" fill="white" stroke-width="1"/><text x="73.0" y="128.0" text-anchor="middle" stroke="none">Pair request</text>
+<rect x="130.0" y="55.0" width="165.0" height="76.0" rx="8" fill="white"/><text x="212.5" y="98.0" text-anchor="middle" stroke="none">Owner: pair button</text>
+<polygon points="360.0,210.0 385.0,235.0 360.0,260.0 335.0,235.0" fill="white"/><text x="360.0" y="201.0" text-anchor="middle" stroke="none">Host owner?</text><text x="360.0" y="240.0" text-anchor="middle" stroke="none">×</text>
+<rect x="430.0" y="197.0" width="165.0" height="76.0" rx="8" fill="white"/><text x="512.5" y="240.0" text-anchor="middle" stroke="none">Gateway: issue code</text>
+<rect x="635.0" y="55.0" width="165.0" height="76.0" rx="8" fill="white"/><text x="717.5" y="98.0" text-anchor="middle" stroke="none">Owner: private /start</text>
+<polygon points="865.0,210.0 890.0,235.0 865.0,260.0 840.0,235.0" fill="white"/><text x="865.0" y="201.0" text-anchor="middle" stroke="none">Valid code?</text><text x="865.0" y="240.0" text-anchor="middle" stroke="none">×</text>
+<rect x="930.0" y="197.0" width="175.0" height="76.0" rx="8" fill="white"/><text x="1017.5" y="240.0" text-anchor="middle" stroke="none">Gateway: save numeric ID</text>
+<circle cx="1178.0" cy="235.0" r="18.0" fill="white" stroke-width="3"/><text x="1178.0" y="270.0" text-anchor="middle" stroke="none">Paired</text>
+<circle cx="718.0" cy="373.0" r="18.0" fill="white" stroke-width="3"/><text x="718.0" y="408.0" text-anchor="middle" stroke="none">Denied</text>
+<polyline points="91,93 130,93" fill="none" marker-end="url(#arrow)"/>
+<polyline points="295,93 360,93 360,210" fill="none" marker-end="url(#arrow)"/>
+<polyline points="385,235 430,235" fill="none" marker-end="url(#arrow)"/>
+<text x="389.0" y="251.0" stroke="none">yes</text>
+<polyline points="360,260 360,373 700,373" fill="none" marker-end="url(#arrow)"/>
+<text x="364.0" y="276.0" stroke="none">no</text>
+<polyline points="595,235 615,235 615,93 635,93" fill="none" marker-end="url(#arrow)"/>
+<polyline points="800,93 865,93 865,210" fill="none" marker-end="url(#arrow)"/>
+<polyline points="890,235 930,235" fill="none" marker-end="url(#arrow)"/>
+<text x="894.0" y="251.0" stroke="none">yes</text>
+<polyline points="865,260 865,373 736,373" fill="none" marker-end="url(#arrow)"/>
+<text x="869.0" y="276.0" stroke="none">expired / wrong / used</text>
+<polyline points="1105,235 1160,235" fill="none" marker-end="url(#arrow)"/>
+</g></svg>

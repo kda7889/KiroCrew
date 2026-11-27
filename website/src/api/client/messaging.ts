@@ -609,6 +609,12 @@ export interface WhatsAppConfigSave {
 
 export function createMessagingEndpoints({ get, post, put, del, j }: ClientTransport) {
   const channelConfigs = {
+    getMaxConfig: () => get('/api/max/config').then(j) as Promise<{
+      connected: boolean; configured: boolean; enabled: boolean;
+      delivery_mode: string; owner_id: string; ready: boolean;
+    }>,
+    issueMaxPairing: () => post('/api/max/pairing', {}).then(j) as Promise<{ code: string; expires_in: number }>,
+    registerMaxSubscription: () => post('/api/max/subscription', {}).then(j) as Promise<{ ok: boolean }>,
     // Slack integration config
     getSlackConfig: () => get('/api/slack/config').then(j) as Promise<SlackConfigData>,
     /** With *alias*, the manifest and create link for a NEW app named after it;

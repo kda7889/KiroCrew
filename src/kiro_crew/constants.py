@@ -1749,6 +1749,7 @@ SLACK_NAMESPACE = "slack"
 #: partially-initialized ``hooks``. This module imports only ``os`` and ``re``, so
 #: it can be read from anywhere. ``messaging.link`` re-exports both names.
 CHANNEL_SESSION_NAMESPACES: tuple[str, ...] = (
+    "max",
     SLACK_NAMESPACE,
     "discord",
     "telegram",

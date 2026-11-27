@@ -19198,6 +19198,16 @@
       "uptime": "运行时长"
     },
     "settings": {
+      "maxPanel": {
+        "guide": "在设置 → 密钥中添加机器人令牌，然后启用 MAX。",
+        "pair": "绑定所有者",
+        "paired": "已绑定所有者：{{id}}",
+        "inactive": "MAX 尚未运行。请检查设置和密钥。",
+        "code_hint": "此代码将在五分钟后过期。请在与机器人的私聊中发送此命令。",
+        "subscribe": "注册 webhook",
+        "subscribed": "Webhook 已注册，尚未测试消息送达。",
+        "subscription_hint": "使用设置中的 HTTPS 地址。更改 webhook 密钥后，请重新注册。"
+      },
       "mobileLoginCard": {
         "sign_in_on_mobile": "在移动设备上登录",
         "create_a_one_time_link_for_mobile_or_another_browser": "为移动设备或其他浏览器创建短时有效的登录链接。链接将在 5 分钟后失效。",

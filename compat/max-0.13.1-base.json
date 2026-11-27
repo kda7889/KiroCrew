@@ -1,0 +1,33 @@
+{
+  "version": "0.13.1",
+  "files": {
+    "src/kiro_crew/channels.py": "d612e75f22a9698ddf5e609d93b936462a2cb2bea6a96b0620b27ace19bc48bb",
+    "src/kiro_crew/config/loader_config.py": "4d21b06c5621f831b2b7f6c83c65fa6870bf73d64ab6a0f588fc144f3af1b4e7",
+    "src/kiro_crew/config/loader_credentials.py": "51266053fe03c69a012cf7cac08e3dee58be3be3c6cf67333c5afad9ca11747a",
+    "src/kiro_crew/config/loader_pipeline.py": "0a0623ca8f91114571c72da1c55c32a53e9d088b1d3a277c1b95c7a7d6084210",
+    "src/kiro_crew/config/resolution.py": "abd66fa19f6bb66539fcc961e370c6918e8301733550db2cdc80bef4935cfcc1",
+    "src/kiro_crew/config/sections_max.py": null,
+    "src/kiro_crew/constants.py": "d19acb1d249b79b045c33dcbcc0f1773a537d57a31198c1b6c7538d5f0fa90c5",
+    "src/kiro_crew/dashboard/handlers/max_pairing.py": null,
+    "src/kiro_crew/dashboard/routes/connections.py": "7b0ec8570b8aa2fbe179257433319f95821f33b48975530377c9a9d3614a283b",
+    "src/kiro_crew/dashboard/token_auth_paths.py": "b2133c5f240dd8f6836309be4215daad0a320ca418609a5e4714c0198d892b19",
+    "src/kiro_crew/max/__init__.py": null,
+    "src/kiro_crew/max/access.py": null,
+    "src/kiro_crew/max/client.py": null,
+    "src/kiro_crew/max/dispatch.py": null,
+    "src/kiro_crew/max/gateway.py": null,
+    "src/kiro_crew/max/login.py": null,
+    "src/kiro_crew/max/renderer.py": null,
+    "src/kiro_crew/max/russian_trusted_root_ca.pem": null,
+    "src/kiro_crew/max/transport.py": null,
+    "src/kiro_crew/max/webhook.py": null,
+    "src/kiro_crew/sandbox_leaves.py": "7dfa4da5d677dc40938400c33af405c3515be5012eb5f66359c3aef95188a501",
+    "src/kiro_crew/sandbox_precreate.py": "4588bdf5d0a0389bae7d0d696330098f91bad7fb55401c058d78dfdab659e318",
+    "src/kiro_crew/sandbox_seals.py": "117ac16edeb536616696433ebac5a5309756c1ea76b79efdc454a55572349a4c",
+    "src/kiro_crew/sandbox_tiers.py": "e1fe4266c854fe710061fd33c9fce7079db6fd5a3884e9d1445459934409cfc1",
+    "src/kiro_crew/security/paths_lists.py": "208c5cd688e96c3c34b5db3334492421dd6ed272d8ee6ad8b8e8690eb35868f9",
+    "src/kiro_crew/slack/gateway.py": "8e0038d861e4552f113ef96149a05279f3c4c4724b25f748220b739069e56170",
+    "src/kiro_crew/slack/gateway_runtime/channel_boot.py": "58360f4b862a3f2d2b82fe09e9d0fc3e5cc46d13e91a0c041a84ef1b3e99306d",
+    "src/kiro_crew/slack/gateway_runtime/orchestrator_init.py": "71a7b6974c424c7757d0fa6c6b54e15f85035ae48e8ea853a0f1e835402f05ad"
+  }
+}

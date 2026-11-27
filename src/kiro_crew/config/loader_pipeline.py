@@ -149,6 +149,7 @@ from kiro_crew.config.sections import (
     _validate_activation,
     coerce_effort,
 )
+from kiro_crew.config.sections_max import MaxConfig
 from kiro_crew.config.superseded_defaults import SupersededDefault, auto_adoptable
 from kiro_crew.config.validation import _CONFIG_CACHE
 from kiro_crew.config.validation import validate_config_data as _validate_config_data
@@ -1281,6 +1282,17 @@ def build_config(
         telemetry=_build_telemetry_config(telemetry_data),
         memory=_build_memory_config(memory_data),
         knowledge=_build_knowledge_config(knowledge_data),
+        max=MaxConfig(
+            delivery_mode=_sections.SectionReader(
+                MaxConfig, _coerced_section(data, "max", _degraded)
+            ).get("delivery_mode"),
+            enabled=_sections.SectionReader(
+                MaxConfig, _coerced_section(data, "max", _degraded)
+            ).read("enabled", _safe_bool),
+            allowed_user_ids=_sections.SectionReader(
+                MaxConfig, _coerced_section(data, "max", _degraded)
+            ).get("allowed_user_ids"),
+        ),
         telegram=_build_telegram_config(telegram_data),
         weixin=_build_weixin_config(weixin_data),
         whatsapp=_build_whatsapp_config(whatsapp_data),

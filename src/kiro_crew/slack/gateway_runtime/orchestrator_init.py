@@ -114,6 +114,7 @@ def __init__(
     # ``restart_channel`` can re-run exactly one of them against a fresh
     # config when a connection parameter changes.
     self._hoist_wecom(cfg, creds)
+    self._hoist_max(cfg, creds)
     self._hoist_telegram(cfg, creds)
     self._hoist_weixin(cfg, creds)
     self._hoist_whatsapp(cfg, creds)

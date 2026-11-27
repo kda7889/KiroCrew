@@ -1,4 +1,5 @@
 import React from 'react'
+import { MessageCircle } from 'lucide-react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { api } from '../../api/client'
 import { SettingsSubNav } from '../../components/SettingsSubNav'
@@ -15,6 +16,7 @@ import { WhatsAppLogo } from '../../components/WhatsAppLogo'
 import { SlackPanel } from './SlackPanel'
 import { DiscordPanel } from './DiscordPanel'
 import { TelegramPanel } from './TelegramPanel'
+import { MaxPanel } from './MaxPanel'
 import { WebexPanel } from './WebexPanel'
 import { WeComPanel } from './WeComPanel'
 import { FeishuPanel } from './FeishuPanel'
@@ -49,6 +51,7 @@ interface ChannelEntry {
  *  per-channel panels (SlackPanel / BotChannelPanel specs) so the list and
  *  the detail pane read the same cache entry. */
 const CHANNELS: ChannelEntry[] = [
+  { key: 'max', name: 'MAX', logo: <MessageCircle size={20} />, queryKey: 'max-config', getConfig: () => api.getMaxConfig(), Panel: MaxPanel },
   { key: 'slack', name: 'Slack', logo: <SlackIcon size={20} />, queryKey: 'slack-config', getConfig: () => api.getSlackConfig(), Panel: SlackPanel },
   { key: 'discord', name: 'Discord', logo: <DiscordIcon size={20} />, queryKey: 'discord-config', getConfig: () => api.getDiscordConfig(), Panel: DiscordPanel },
   { key: 'telegram', name: 'Telegram', logo: <TelegramLogo size={20} />, queryKey: 'telegram-config', getConfig: () => api.getTelegramConfig(), Panel: TelegramPanel },

@@ -129,6 +129,7 @@ _BYPASS_EXACT = {
 #: check in ``server``), and a hand-copied second spelling is how one control
 #: ends up pointed at a route the other is not.
 TEAMS_WEBHOOK_PATH = "/api/messaging/teams"
+MAX_WEBHOOK_PATH = "/api/messaging/max"
 
 #: The inbound agent webhook route, named once for exactly the same reason
 #: :data:`TEAMS_WEBHOOK_PATH` is: the same two independent middleware exemptions
@@ -199,6 +200,7 @@ LOCAL_AUTH_TOKEN_PATH = "/oauth/token"
 LOCAL_AUTH_REVOKE_PATH = "/oauth/revoke"
 
 _BYPASS_EXACT_METHODS: dict[str, frozenset[str]] = {
+    MAX_WEBHOOK_PATH: _SELF_AUTH_WEBHOOK_METHODS,
     AGENT_HOOK_PATH: _SELF_AUTH_WEBHOOK_METHODS,
     LOCAL_AUTH_METADATA_PATH: frozenset({"GET"}),
     LOCAL_AUTH_AUTHORIZE_PATH: frozenset({"GET"}),
@@ -263,6 +265,7 @@ def _exact_method_bypass(path: str, method: str) -> bool:
 # token alone -- keep their Origin check even though the literal ``agent`` matches
 # their wildcard.
 CSRF_EXEMPT_EXACT_METHODS: dict[str, frozenset[str]] = {
+    MAX_WEBHOOK_PATH: _SELF_AUTH_WEBHOOK_METHODS,
     TEAMS_WEBHOOK_PATH: _SELF_AUTH_WEBHOOK_METHODS,
 }
 

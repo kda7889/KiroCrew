@@ -976,6 +976,14 @@ them with `EnvStagingRefused`, which the wizard prints and the dashboard and Wei
 answer as a 409 naming the fix. A refused owner-only lockdown of the staged file keeps
 each writer's own answer: the wizard and the dashboard saves warn and publish, and
 `secrets import` raises and also fsyncs.
+MAX's `max` data-home directory uses the same whole-directory boundary: hidden
+from every agent sandbox tier, precreated at 0700 before spawn, refused if aliased,
+and fenced from agent file tools. This covers its SQLite inbox and future
+journals as well as polling cursor temps. Mode 0600 alone is not a same-UID
+boundary. These plan/table contracts do not prove the OS launcher actually
+confines a process on a given host; verify the real sandbox before live MAX use.
+The gateway's SQLite path opens still trust other unsandboxed same-UID processes.
+
 `auth-store-staging` is a direct child of the data home that is masked
 (`sandbox._CREW_HIDDEN_LEAVES`), precreated so a sandbox spawned before the first write does
 not watch the directory appear (`_CREW_PRECREATE_HIDDEN_DIR_LEAVES`), and fenced from the
@@ -6631,6 +6639,9 @@ contiguous cut of the registry at its first Slack row, each named for the surfac
 its rows cover, so a few rows sit on the other side of the cut. A new sink row is appended to
 the end of the part whose surface it belongs to, and a new non-egress module goes in the
 facade's set.
+
+`max/webhook.py` is a non-egress redaction module: it scrubs inbound text before
+durable inbox storage. Its classification does not claim outbound coverage.
 
 The Settings → Security "Live Security Posture" card renders from
 `GET /api/security/posture`, whose payload is built by

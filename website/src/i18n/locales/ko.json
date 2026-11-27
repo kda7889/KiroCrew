@@ -19198,6 +19198,16 @@
       "uptime": "가동 시간"
     },
     "settings": {
+      "maxPanel": {
+        "guide": "설정 → 비밀 정보에 봇 토큰을 추가한 다음 MAX를 켜세요.",
+        "pair": "소유자 연결",
+        "paired": "소유자 연결됨: {{id}}",
+        "inactive": "MAX가 실행 중이 아닙니다. 설정과 비밀 정보를 확인하세요.",
+        "code_hint": "이 코드는 5분 후 만료됩니다. 봇과의 개인 채팅에서 이 명령을 보내세요.",
+        "subscribe": "Webhook 등록",
+        "subscribed": "Webhook이 등록되었습니다. 전송은 아직 확인하지 않았습니다.",
+        "subscription_hint": "설정의 HTTPS 주소를 사용합니다. Webhook 비밀 키를 바꾸면 다시 등록하세요."
+      },
       "mobileLoginCard": {
         "sign_in_on_mobile": "모바일에서 로그인",
         "create_a_one_time_link_for_mobile_or_another_browser": "모바일이나 다른 브라우저에서 사용할 수 있는 단기 로그인 링크를 만드세요. 링크는 5분 후에 만료됩니다.",
