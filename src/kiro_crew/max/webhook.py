@@ -14,7 +14,7 @@ from urllib.parse import urlsplit
 from aiohttp import web
 
 from kiro_crew.dashboard.token_auth_paths import MAX_WEBHOOK_PATH
-from kiro_crew.platform_compat import open_create_no_reparse, open_file_no_reparse
+from kiro_crew.platform_compat import local_user_id, open_create_no_reparse, open_file_no_reparse
 
 MAX_BODY = 65536
 
@@ -51,7 +51,7 @@ class WebhookInbox:
         if path.parent.is_symlink():
             raise PermissionError("MAX inbox directory must not be a link")
         parent = path.parent.stat()
-        if os.name == "posix" and (parent.st_uid != os.getuid() or parent.st_mode & 0o022):
+        if os.name == "posix" and (parent.st_uid != local_user_id() or parent.st_mode & 0o022):
             raise PermissionError("MAX inbox directory must be owner-controlled")
         fd = open_create_no_reparse(path)
         try:
@@ -90,7 +90,7 @@ class WebhookInbox:
         info = os.fstat(fd)
         if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
             raise PermissionError("MAX inbox must be a regular file with one link")
-        if os.name == "posix" and (info.st_uid != os.getuid() or info.st_mode & 0o077):
+        if os.name == "posix" and (info.st_uid != local_user_id() or info.st_mode & 0o077):
             raise PermissionError("MAX inbox requires owner-only permissions")
         return info.st_dev, info.st_ino
 

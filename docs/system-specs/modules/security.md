@@ -6640,6 +6640,9 @@ its rows cover, so a few rows sit on the other side of the cut. A new sink row i
 the end of the part whose surface it belongs to, and a new non-egress module goes in the
 facade's set.
 
+`max/webhook.py` is a non-egress redaction module: it scrubs inbound text before
+durable inbox storage. Its classification does not claim outbound coverage.
+
 The Settings → Security "Live Security Posture" card renders from
 `GET /api/security/posture`, whose payload is built by
 `security_posture.build_posture_snapshot()`. It exists to fix a class of bug, not

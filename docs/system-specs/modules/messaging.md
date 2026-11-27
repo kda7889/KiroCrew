@@ -30,6 +30,8 @@ the registered transport, preventing acknowledgement by a stopped inbox.
 Webhook messages from the admitted owner are screened and durably admitted to
 `<data home>/max/inbox.sqlite` before HTTP 200. The file is created mode 0600;
 the inbox admits at most 256 pending entries and retains 4096 done fingerprints.
+On POSIX, inbox directory and file ownership use `platform_compat.local_user_id`,
+which preserves the invoking UID check without a direct POSIX call in the adapter.
 Existing public-permission files, leaf/parent symlinks, hardlink aliases and
 changed file identity refuse startup or access. This is not a complete same-UID
 filesystem boundary: SQLite reopens by pathname and its journal remains subject

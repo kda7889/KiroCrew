@@ -17,7 +17,7 @@ async def api_max_config(request):
     if denied is not None:
         return denied
     if request.get("app") or not is_host_owner_dashboard_request(request):
-        return web.json_response({"error": "owner_only"}, status=403)
+        return web.json_response({"error": "owner_only", "code": "owner_only"}, status=403)
     from kiro_crew.config.loader import KiroCrewConfig
     from kiro_crew.max.access import OwnerAccess
 
@@ -47,7 +47,9 @@ async def api_max_subscribe(request):
         or not is_host_owner_dashboard_request(request)
         or not check_origin(request, require=True)
     ):
-        return web.json_response({"error": "owner_origin_required"}, status=403)
+        return web.json_response(
+            {"error": "owner_origin_required", "code": "owner_origin_required"}, status=403
+        )
     from kiro_crew.config.loader import KiroCrewConfig
     from kiro_crew.max.webhook import subscription_url
 
@@ -61,11 +63,16 @@ async def api_max_subscribe(request):
         or transport is None
         or service is None
     ):
-        return web.json_response({"error": "max_webhook_not_ready"}, status=409)
+        return web.json_response(
+            {"error": "max_webhook_not_ready", "code": "max_webhook_not_ready"}, status=409
+        )
     try:
         url = subscription_url(cfg.dashboard.url)
     except ValueError:
-        return web.json_response({"error": "external_https_443_required"}, status=409)
+        return web.json_response(
+            {"error": "external_https_443_required", "code": "external_https_443_required"},
+            status=409,
+        )
     try:
         result = await transport.client.request(
             "POST",
@@ -77,9 +84,13 @@ async def api_max_subscribe(request):
             },
         )
     except RuntimeError:
-        return web.json_response({"error": "max_subscription_failed"}, status=502)
+        return web.json_response(
+            {"error": "max_subscription_failed", "code": "max_subscription_failed"}, status=502
+        )
     if result.get("success") is not True:
-        return web.json_response({"error": "max_subscription_failed"}, status=502)
+        return web.json_response(
+            {"error": "max_subscription_failed", "code": "max_subscription_failed"}, status=502
+        )
     sel().log_api_access(
         caller=request.get("user", ""),
         operation="max.subscription.register",
@@ -98,16 +109,22 @@ async def api_max_pairing(request):
         or not check_origin(request, require=True)
         or not is_host_owner_dashboard_request(request)
     ):
-        return web.json_response({"error": "owner_origin_required"}, status=403)
+        return web.json_response(
+            {"error": "owner_origin_required", "code": "owner_origin_required"}, status=403
+        )
     state = request.app.get("state")
     transport = state.channel_transports.get("max") if state else None
     if transport is None:
-        return web.json_response({"error": "max_not_started"}, status=409)
+        return web.json_response(
+            {"error": "max_not_started", "code": "max_not_started"}, status=409
+        )
     await transport._refresh()
     try:
         code = transport.access.issue()
     except ValueError:
-        return web.json_response({"error": "owner_already_configured"}, status=409)
+        return web.json_response(
+            {"error": "owner_already_configured", "code": "owner_already_configured"}, status=409
+        )
     sel().log_api_access(
         caller=request.get("user", ""),
         operation="max.pairing.issue",

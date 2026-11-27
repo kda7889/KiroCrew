@@ -64,6 +64,9 @@ from kiro_crew import _facade_mirror
 # catches an omission.
 NON_EGRESS_REDACTION_MODULES: frozenset[str] = frozenset(
     {
+        # Inbound MAX text is redacted before durable inbox storage, not sent
+        # to a user or external service. Outbound replies use the transport sink.
+        "max/webhook.py",
         # The output seams' table and scope: it applies no redactor and
         # emits nothing; the call-site scan matches the seam names its prose
         # lists (`redact(x)`, `redact_log_via_context`).

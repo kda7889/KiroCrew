@@ -11,6 +11,8 @@ TTL and retry contract is in [messaging](messaging.md#max-development-channel).
 (`max.subscription.register`) also require the host owner and refuse app tokens
 and teammates. Subscription registration requires a same-origin POST and uses
 only the operator-configured HTTPS origin and server-held secrets.
+MAX management errors carry a lower-snake `code` equal to the existing `error`
+identifier; HTTP statuses and the advisory `error` field remain unchanged.
 `POST /api/messaging/max` (`max.webhook.receive`) self-authenticates using the MAX
 secret header. Only that exact path and method are exempt from dashboard-token
 and CSRF checks; the handler rejects a missing/wrong secret before reading JSON.

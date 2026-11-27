@@ -12,6 +12,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from kiro_crew.testing.wait import default_timeout
+
 pytestmark = pytest.mark.skipif(sys.platform != "linux", reason="testserver helper is Linux-only")
 
 
@@ -583,7 +585,9 @@ def test_real_uv_dry_run_ignores_poisoned_caller_and_home_config(helper, monkeyp
         str(requirements),
     ]
     env = {"PATH": "/usr/local/bin:/usr/bin:/bin", "LANG": "C.UTF-8"}
-    legacy = subprocess.run([uv] + args, cwd=caller, env=env, capture_output=True, timeout=15)
+    legacy = subprocess.run(
+        [uv] + args, cwd=caller, env=env, capture_output=True, timeout=default_timeout()
+    )
     assert legacy.returncode == 2
     assert b"uv.toml" in legacy.stderr
     monkeypatch.setattr(helper, "HOME", home)

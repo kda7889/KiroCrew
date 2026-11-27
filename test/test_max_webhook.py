@@ -38,6 +38,18 @@ def test_inbox_refuses_public_file_and_symlink(tmp_path):
     assert target.read_bytes() == b""
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX permission contract")
+@pytest.mark.parametrize("leaf", [False, True])
+def test_inbox_uses_platform_user_identity(tmp_path, monkeypatch, leaf):
+    from kiro_crew.max import webhook
+
+    path = tmp_path / "inbox.sqlite"
+    inbox = webhook.WebhookInbox(path) if leaf else None
+    monkeypatch.setattr(webhook, "local_user_id", lambda: -1, raising=False)
+    with pytest.raises(PermissionError):
+        inbox.next() if leaf else webhook.WebhookInbox(path)
+
+
 def test_inbox_refuses_replaced_database(tmp_path):
     from kiro_crew.max.webhook import WebhookInbox
 
