@@ -74,6 +74,7 @@ def test_user_actor_needs_a_person_send():
 
 def test_origin_values_are_pinned():
     assert ua.ORIGIN_VALUES == (
+        "max",
         "slack",
         "discord",
         "telegram",
@@ -92,7 +93,7 @@ def test_origin_values_are_pinned():
         "internal",
         "other",
     )
-    assert tuple(CHANNEL_SESSION_NAMESPACES) == ua.ORIGIN_VALUES[:11]
+    assert tuple(CHANNEL_SESSION_NAMESPACES) == ua.ORIGIN_VALUES[:12]
 
 
 def test_every_session_source_label_has_an_origin_and_a_kind():

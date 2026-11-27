@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Any, TypedDict
 
 API_ORIGIN = "https://platform-api2.max.ru"
+# MAX permits at most two sends per second in one dialog.
+SEND_INTERVAL_SECS = 0.55
 
 
 def _max_ssl_context() -> ssl.SSLContext:
@@ -33,6 +35,8 @@ class MaxClient:
         self._task = None
         self.on_close = None
         self.dispatcher: Any = None
+        self._send_lock = asyncio.Lock()
+        self._next_send_at = 0.0
         self._state: PollState = {"marker": None, "seen": []}
         if self.cursor.exists():
             self._state = json.loads(self.cursor.read_text(encoding="utf-8"))
@@ -83,10 +87,32 @@ class MaxClient:
             raise RuntimeError("MAX request failed") from None
 
     async def send(self, uid, text, **kwargs):
-        result = await self.request(
-            "POST", "/messages", params={"user_id": uid}, body={"text": text}
-        )
+        async with self._send_lock:
+            loop = asyncio.get_running_loop()
+            delay = self._next_send_at - loop.time()
+            if delay > 0:
+                await asyncio.sleep(delay)
+            try:
+                return await self._send(uid, text, **kwargs)
+            finally:
+                self._next_send_at = loop.time() + SEND_INTERVAL_SECS
+
+    async def _send(self, uid, text, **kwargs):
+        body = {"text": text}
+        buttons = kwargs.get("buttons")
+        if buttons:
+            body["attachments"] = [{"type": "inline_keyboard", "payload": {"buttons": buttons}}]
+        result = await self.request("POST", "/messages", params={"user_id": uid}, body=body)
         return result["message"]["body"]["mid"]
+
+    async def edit(self, mid, text):
+        result = await self.request(
+            "PUT",
+            "/messages",
+            params={"message_id": mid},
+            body={"text": text, "attachments": []},
+        )
+        return result.get("success") is True
 
     async def answer(self, cid, text):
         await self.request(

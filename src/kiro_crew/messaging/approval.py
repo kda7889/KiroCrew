@@ -83,6 +83,7 @@ APPROVAL_ORDINALS = {"1": APPROVE, "2": DENY, "3": TRUST}
 #: open, so a chatty synonym list would start eating real messages.
 APPROVAL_WORDS = {
     "approve": APPROVE,
+    "approve once": APPROVE,
     "allow": APPROVE,
     "yes": APPROVE,
     "y": APPROVE,
@@ -93,6 +94,7 @@ APPROVAL_WORDS = {
     "reject": DENY,
     "cancel": DENY,
     "trust": TRUST,
+    "trust this session": TRUST,
     "always": TRUST,
 }
 
@@ -462,7 +464,8 @@ class TextReplyApprovalDecider:
 
     async def __call__(self, event: Any) -> bool:
         self.last_deny_cause = ""
-        request_id = str(getattr(event, "request_id", "") or "")
+        raw_id = getattr(event, "request_id", None)
+        request_id = "" if raw_id is None else str(raw_id)
         entry = claim_approval(self.session_key, request_id)
         if entry is None:
             # The renderer did not open one, so no prompt reached anybody --

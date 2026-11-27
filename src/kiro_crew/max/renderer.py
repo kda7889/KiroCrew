@@ -5,7 +5,11 @@ from kiro_crew.messaging.approval import (
     build_approval_prompt,
     open_approval,
 )
-from kiro_crew.messaging.renderer import SilentRenderer, render_options_as_text
+from kiro_crew.messaging.renderer import (
+    SilentRenderer,
+    mcp_identity_line,
+    render_options_as_text,
+)
 
 
 class MaxRenderer(SilentRenderer):
@@ -36,11 +40,14 @@ class MaxRenderer(SilentRenderer):
             conversation_id=self.uid,
             on_timeout=timeout,
         )
+        identity_pair = getattr(self, "prompt_mcp_identity", ("", ""))
+        identity = mcp_identity_line(*identity_pair)
+        title = tool_title or identity_pair[1] or "Запрос инструмента"
+        prompt = build_approval_prompt(title, tool_purpose)
+        if identity:
+            prompt += "\n" + identity
         try:
-            await self.transport.send_message(
-                self.uid,
-                build_approval_prompt(tool_title, tool_purpose) + "\n" + tool_input,
-            )
+            await self.transport.send_message(self.uid, prompt + "\n" + tool_input)
         except BaseException:
             abandon_approval(self.session_key, request_id)
             raise

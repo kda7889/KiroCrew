@@ -1,5 +1,7 @@
 """DM-only boundary: authorize every inbound event and every outbound target."""
 
+from typing import TYPE_CHECKING
+
 from kiro_crew.messaging.transport import (
     ConfiguredChannelTarget,
     InboundMessage,
@@ -7,8 +9,12 @@ from kiro_crew.messaging.transport import (
     TransportCapabilities,
 )
 
+if TYPE_CHECKING:
+    from kiro_crew.max.webhook import MaxWebhook
+
 
 class MaxTransport(MessagingTransport):
+    webhook: "MaxWebhook"
     channel_type = "max"
     capabilities = TransportCapabilities(
         streaming=False,
@@ -20,7 +26,7 @@ class MaxTransport(MessagingTransport):
         threads=False,
         max_buttons=0,
         max_message_chars=4000,
-        supports_session_resume=False,
+        supports_session_resume=True,
     )
 
     def __init__(self, client, access, dispatch, callback):
@@ -70,24 +76,53 @@ class MaxTransport(MessagingTransport):
         return []
 
     async def send_message(self, conversation_id, content, thread_id=None):
+        return await self._send(conversation_id, content, thread_id=thread_id)
+
+    async def send_keyboard(self, conversation_id, content, buttons):
+        return await self._send(conversation_id, content, buttons=buttons)
+
+    async def edit_message(self, conversation_id, mid, content):
+        await self._refresh()
+        await self.resolve_conversation(conversation_id)
+        from kiro_crew.max.sessions import _safe
+
+        return await self.client.edit(mid, _safe(self._redact_exact(content), 4000))
+
+    async def _send(self, conversation_id, content, thread_id=None, buttons=None):
         await self._refresh()
         await self.resolve_conversation(conversation_id)
         if thread_id is not None:
             raise PermissionError("MAX groups and threads are disabled")
         from kiro_crew.messaging.renderer import chunk_for_transport
 
+        content = self._redact_exact(content)
+        mid = ""
+        for chunk in chunk_for_transport(content, self.capabilities):
+            await self._refresh()
+            await self.resolve_conversation(conversation_id)
+            if buttons:
+                from kiro_crew.max.sessions import _safe
+
+                rows = [
+                    [
+                        dict(button, text=_safe(self._redact_exact(button["text"]), 60))
+                        for button in row
+                    ]
+                    for row in buttons
+                ]
+                mid = await self.client.send(int(conversation_id), chunk, buttons=rows)
+            else:
+                mid = await self.client.send(int(conversation_id), chunk)
+        return mid
+
+    def _redact_exact(self, content):
         for token in (
             getattr(self.client, "_token", ""),
             getattr(getattr(self, "webhook", None), "secret", ""),
         ):
             if token:
                 content = content.replace(token, "[REDACTED: credential]")
-        mid = ""
-        for chunk in chunk_for_transport(content, self.capabilities):
-            await self._refresh()
-            await self.resolve_conversation(conversation_id)
-            mid = await self.client.send(int(conversation_id), chunk)
-        return mid
+        return content
 
     async def receive(self, raw):
         from kiro_crew.messaging.identity import channel_inbound_permitted

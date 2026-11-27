@@ -3,6 +3,22 @@
 Thanks for your interest in contributing! Kiro Crew is an open-source project and
 we welcome issues and pull requests.
 
+## Contributing to the MAX integration fork
+
+For MAX changes, open issues and pull requests in
+[kda7889/KiroCrew](https://github.com/kda7889/KiroCrew), or discuss designs in
+[the fork discussions](https://github.com/kda7889/KiroCrew/discussions).
+Start with [the module guide](integrations/max/README.md) and its integration map.
+Paid AI subscriptions and access to our testserver are not required to contribute.
+The maintainer reviews changes; automated MAX tests run without bot credentials.
+Keep tests synthetic and use the repository's root isolation fixtures. Never add
+real pairing codes, vault files, chat transcripts, private keys or host settings.
+The Apache-2.0 license applies to contributions; retain copyright and notices.
+
+The upstream contribution process below is retained for changes proposed to
+kirodotdev/KiroCrew. Its paid review infrastructure is not a prerequisite for
+submitting a MAX improvement to this fork.
+
 ## Reporting Bugs and Requesting Features
 
 Open a [GitHub issue](https://github.com/kirodotdev/KiroCrew/issues). Before you

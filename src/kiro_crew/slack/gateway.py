@@ -696,6 +696,7 @@ if TYPE_CHECKING:
     from kiro_crew.discord.client import DiscordClient
     from kiro_crew.imessage.client import IMessageClient
     from kiro_crew.kiro_prerequisite import KiroPrerequisiteService
+    from kiro_crew.max.client import MaxClient
     from kiro_crew.memory_startup import MemoryStartup
     from kiro_crew.messaging.registry import ChannelDescriptor
     from kiro_crew.providers.base import LLMProvider
@@ -835,6 +836,10 @@ class GatewayOrchestrator:
     _session_tasks: dict[str, asyncio.Task]
     _pending_queue: dict[str, list]
     _socket_client: WSSocketModeClient | None
+    _max_token: str
+    _max_webhook_secret: str
+    _max_enabled: bool
+    _max_client: "MaxClient | None"
     _wecom_client: "WeComClient | None"
     _channel_handles: dict[str, object]
     _inbound_replay_task: "asyncio.Task[None] | None"
