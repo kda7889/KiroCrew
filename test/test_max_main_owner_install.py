@@ -143,6 +143,186 @@ def test_space_only_mode_cannot_create_backups_or_control_service(helper, monkey
     assert json.loads(capsys.readouterr().out) == {"source_bytes": 123}
 
 
+@pytest.fixture
+def status_home(helper, monkeypatch, tmp_path):
+    home = tmp_path / "home"
+    home.mkdir()
+    parent = home / "crew/workspace/_only_local"
+    parent.mkdir(parents=True)
+    monkeypatch.setattr(helper, "HOME", home)
+    monkeypatch.setattr(helper, "OWNER_UID", home.stat().st_uid)
+    monkeypatch.setattr(helper, "STATUS_DIR", parent / "max-main-status")
+    return helper
+
+
+def test_status_is_readable_bounded_and_never_contains_exception_text(status_home):
+    helper = status_home
+    helper.STATUS = helper.StatusLog()
+    helper.status_event("start", stage="preflight")
+    helper.status_event("private_log", private_log=helper.HOME / "private/operations.log")
+    helper.status_event("error", error=ValueError("synthetic-secret-never-log"))
+    for _ in range(200):
+        helper.status_event("subprocess_exit", returncode=0)
+    path = helper.STATUS_DIR / "status.json"
+    data = json.loads(path.read_text())
+    assert "synthetic-secret-never-log" not in path.read_text()
+    assert len(data["events"]) <= 64
+    assert data["private_log"] == str(helper.HOME / "private/operations.log")
+    assert path.stat().st_size < 65536
+    assert path.stat().st_mode & 0o777 == 0o644
+    assert helper.STATUS_DIR.stat().st_mode & 0o777 == 0o755
+
+
+def test_status_refuses_symlink_and_existing_unrelated_file(status_home):
+    helper = status_home
+    helper.STATUS = helper.StatusLog()
+    helper.status_event("start", stage="preflight")
+    path = helper.STATUS_DIR / "status.json"
+    path.write_bytes(b"unrelated root file")
+    with pytest.raises(ValueError, match="status"):
+        helper.STATUS.write()
+    assert path.read_bytes() == b"unrelated root file"
+    path.unlink()
+    target = helper.HOME / "untouched"
+    target.write_bytes(b"keep")
+    path.symlink_to(target)
+    with pytest.raises(OSError):
+        helper.STATUS.write()
+    assert target.read_bytes() == b"keep"
+
+
+def test_status_records_preflight_failure_before_private_backup(status_home, monkeypatch):
+    helper = status_home
+    monkeypatch.setattr(helper, "check_operator", lambda: None)
+    monkeypatch.setattr(helper.sys, "flags", SimpleNamespace(isolated=True))
+    monkeypatch.setattr(helper.sys, "argv", ["owner-helper"])
+    monkeypatch.setattr(helper, "BASE", helper.HOME / "backups")
+    monkeypatch.setattr(helper.os, "umask", lambda value: 0o022)
+
+    def fail(*args, **kwargs):
+        raise PermissionError(13, "synthetic-secret-never-log")
+
+    monkeypatch.setattr(helper.Path, "mkdir", fail)
+    with pytest.raises(PermissionError):
+        helper.main()
+    path = helper.STATUS_DIR / "status.json"
+    data = json.loads(path.read_text())
+    assert data["events"][0]["event"] == "start"
+    assert data["events"][-1]["event"] == "error"
+    assert data["events"][-1]["error_type"] == "PermissionError"
+    assert data["events"][-1]["errno"] == 13
+    assert "synthetic-secret" not in path.read_text()
+
+
+def test_status_records_subprocess_returncode_without_argv(status_home, monkeypatch):
+    helper = status_home
+    helper.STATUS = helper.StatusLog()
+
+    class Child:
+        pid = 12345
+
+        def wait(self, timeout):
+            return 7
+
+    monkeypatch.setattr(helper.subprocess, "Popen", lambda *a, **k: Child())
+    monkeypatch.setattr(helper.os, "killpg", lambda *a: None)
+    with pytest.raises(helper.subprocess.CalledProcessError):
+        helper.run(["synthetic-secret-argv"])
+    text = (helper.STATUS_DIR / "status.json").read_text()
+    assert json.loads(text)["events"][-1]["returncode"] == 7
+    assert "synthetic-secret-argv" not in text
+
+
+def test_status_does_not_change_files_during_archive_compare(status_home):
+    helper = status_home
+    helper.STATUS = helper.StatusLog()
+    helper.status_event("start", stage="archive_state")
+    home = helper.HOME / "crew"
+    archive = helper.HOME / "state.tar"
+    helper.archive_tree(home, archive)
+    data = json.loads((helper.STATUS_DIR / "status.json").read_text())
+    assert data["events"][-1]["event"] == "subprocess_exit"
+    helper.restore_tree(home, archive, helper.HOME / "failed-state")
+    helper.status_event("success", stage="recovered")
+    data = json.loads((helper.STATUS_DIR / "status.json").read_text())
+    assert data["events"][-1]["stage"] == "recovered"
+
+
+def test_status_main_success_without_real_apply(status_home, monkeypatch):
+    helper = status_home
+    monkeypatch.setattr(helper, "check_operator", lambda: None)
+    monkeypatch.setattr(helper.sys, "flags", SimpleNamespace(isolated=True))
+    monkeypatch.setattr(helper.sys, "argv", ["owner-helper"])
+    monkeypatch.setattr(helper, "owner_operation", lambda args: None)
+    helper.main()
+    data = json.loads((helper.STATUS_DIR / "status.json").read_text())
+    assert [row["event"] for row in data["events"]] == ["start", "success"]
+
+
+def test_unsafe_status_file_blocks_main_before_any_operation(status_home, monkeypatch):
+    helper = status_home
+    helper.STATUS = helper.StatusLog()
+    helper.status_event("start")
+    path = helper.STATUS_DIR / "status.json"
+    path.write_bytes(b"unrelated root file")
+    monkeypatch.setattr(helper, "check_operator", lambda: None)
+    monkeypatch.setattr(helper.sys, "flags", SimpleNamespace(isolated=True))
+    monkeypatch.setattr(helper.sys, "argv", ["owner-helper"])
+    monkeypatch.setattr(helper, "owner_operation", lambda args: pytest.fail("unsafe log"))
+    with pytest.raises(ValueError, match="unrelated"):
+        helper.main()
+    assert path.read_bytes() == b"unrelated root file"
+
+
+def test_foreign_status_directory_is_not_changed(status_home, monkeypatch):
+    helper = status_home
+    helper.STATUS = helper.StatusLog()
+    helper.status_event("start")
+    path = helper.STATUS_DIR / "status.json"
+    before = path.read_bytes()
+    monkeypatch.setattr(helper.os, "geteuid", lambda: helper.OWNER_UID + 1)
+    with pytest.raises(ValueError, match="ownership"):
+        helper.STATUS.write()
+    assert path.read_bytes() == before
+
+
+def test_status_parent_symlink_and_hardlink_are_refused(status_home):
+    helper = status_home
+    helper.STATUS = helper.StatusLog()
+    helper.status_event("start")
+    path = helper.STATUS_DIR / "status.json"
+    other = helper.HOME / "linked-status"
+    other.hardlink_to(path)
+    before = other.read_bytes()
+    with pytest.raises(ValueError, match="links"):
+        helper.STATUS.write()
+    assert other.read_bytes() == before
+    parent = helper.STATUS_DIR.parent
+    saved = parent.with_name("saved")
+    parent.rename(saved)
+    parent.symlink_to(saved, target_is_directory=True)
+    with pytest.raises(OSError):
+        helper.STATUS.write()
+
+
+def test_lost_status_log_never_prevents_required_rollback(prepared_apply, monkeypatch):
+    helper, events = prepared_apply
+    helper.STATUS = helper.StatusLog()
+
+    def lose_log():
+        raise OSError("synthetic status path unavailable")
+
+    monkeypatch.setattr(helper.STATUS, "write", lose_log)
+
+    def fail_install():
+        raise ValueError("synthetic install failure")
+
+    monkeypatch.setattr(helper, "install_package", fail_install)
+    with pytest.raises(ValueError, match="install failure"):
+        helper.apply()
+    assert events == ["stop", "crew", "runtime", "rollback"]
+
+
 def test_only_scalar_systemd_properties_are_requested(helper, monkeypatch):
     seen = []
 

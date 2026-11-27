@@ -2,8 +2,55 @@
 
 ## Current owner-run step
 
-**Installation is blocked on capacity. Do not rerun the install command below.**
-The owner's helper refused before stopping the service or installing anything.
+The owner has requested another native run with a readable diagnostic log.
+Use this existing command in an ordinary interactive terminal on testserver:
+
+```bash
+sudo /usr/bin/python3 -I /home/adminuser/.kiro/crew/workspace-member-codex-dev/kirocrew-max-source/scripts/max_main_owner_install.py
+```
+
+Do not pipe it into `tee`: the stdout TTY guard is required. The agent does
+not execute the helper. The last observed main process was still0.13.1;
+neither a successful owner deployment nor a rollback has been established.
+Native state/space/service/backup guards run again before mutation. Historical
+capacity observations and the Proxmox proposal below are not new instructions
+to resize, clean up or bypass the current guard.
+
+After the native operator/root/host/TTY and isolated-Python guards pass, the
+helper creates a fixed readable diagnostic snapshot before the private backup
+root, lock or application preflight:
+
+`/home/adminuser/.kiro/crew/workspace-member-codex-dev/_only_local/max-main-status/status.json`
+
+The status directory is root-owned0755 and the JSON file root-owned0644, so
+the current workspace member can read it without root backup access. It keeps
+the most recent64 events within64KiB, resetting for each native invocation.
+It reports stages, times, result, exception type, helper function/line, numeric
+errno/child returncode and space counts. Only explicitly listed fixed validation
+messages are included; all other exception text is withheld. Subprocess argv,
+stdout/stderr, tracebacks, secret values, configuration/transcript contents and
+private archive contents are never copied into this file. A separate top-level
+field points the owner at the private operations log once it exists. A process
+crash/kill may leave the last stage with no final result; that is not success.
+
+Every path component below the fixed home is opened as a directory with
+`O_NOFOLLOW` and pinned descriptors. The status directory must belong to root
+and must not be writable by other users. Existing status files must be regular,
+root-owned, single-link, bounded files bearing this helper's format marker;
+symlinks, foreign files and unrelated existing content are not overwritten.
+An unsafe initial diagnostic target refuses deployment. A later diagnostic I/O
+failure prints only a fixed warning and never prevents required service recovery.
+Owner/sandbox/TTY refusals occur before any diagnostic write; do not clear a
+sandbox marker or change guards to obtain a log.
+
+Status writes are buffered during tar creation/comparison and during tree
+restoration. Otherwise the status file, which is itself inside the full data
+backup, would change mid-compare or disappear during a retained-tree rename.
+The same fixed path is reopened safely after restoration. No backup component
+is excluded for logging. The raw root-only recovery log and archives remain
+under `/var/backups/kirocrew-max/main-*`; the agent must not open them.
+`--space-report` remains metadata-only and does not create a status log.
+
 The existing `--space-report` mode checks the native-owner/sandbox/terminal guards, counts file
 metadata and prints byte totals. It creates no backup, lock or log, reads no
 file contents and makes no service or network call. It must run in the owner's

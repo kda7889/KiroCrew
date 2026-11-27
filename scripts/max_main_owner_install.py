@@ -16,6 +16,7 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+from contextlib import contextmanager
 from pathlib import Path
 
 HOME = Path("/home/adminuser")
@@ -35,6 +36,159 @@ SYSTEMCTL = "/usr/bin/systemctl"
 DROPIN = Path("/etc/systemd/system/kirocrew.service.d/90-max-channel.conf")
 DROPIN_BYTES = b'[Service]\nEnvironment="MAX_BOT_TOKEN=secret://bot_max_kda"\n'
 LOG = None
+STATUS_DIR = STATE / "workspace-member-codex-dev/_only_local/max-main-status"
+STATUS = None
+STATUS_FORMAT = "max-main-status-v1"
+STATUS_LIMIT = 65536
+STATUS_EVENTS = 64
+
+
+def open_status_directory():
+    """Pin every user-controlled path component; never follow a root-write link."""
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    fd = os.open(HOME, flags)
+    created = False
+    try:
+        parts = STATUS_DIR.relative_to(HOME).parts
+        for index, part in enumerate(parts):
+            info = os.fstat(fd)
+            if info.st_uid not in (0, OWNER_UID) or info.st_mode & 0o002:
+                raise ValueError("unsafe status parent directory")
+            if index == len(parts) - 1:
+                try:
+                    os.mkdir(part, mode=0o755, dir_fd=fd)
+                    created = True
+                except FileExistsError:
+                    pass
+            next_fd = os.open(part, flags, dir_fd=fd)
+            os.close(fd)
+            fd = next_fd
+        info = os.fstat(fd)
+        if info.st_uid != os.geteuid() or (not created and stat.S_IMODE(info.st_mode) != 0o755):
+            raise ValueError("unsafe status directory ownership or permissions")
+        os.fchmod(fd, 0o755)
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
+
+
+class StatusLog:
+    """A bounded diagnostic snapshot, never raw exception or subprocess output."""
+
+    def __init__(self):
+        self.events = []
+        self.stage = "preflight"
+        self.deferred = 0
+        self.private_log = None
+
+    def write(self):
+        if self.deferred:
+            return
+        payload = json.dumps(
+            {"format": STATUS_FORMAT, "private_log": self.private_log, "events": self.events},
+            separators=(",", ":"),
+        ).encode()
+        if len(payload) > STATUS_LIMIT:
+            raise ValueError("status diagnostic exceeds its size limit")
+        directory = open_status_directory()
+        fd = None
+        try:
+            flags = os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK
+            try:
+                fd = os.open("status.json", flags | os.O_CREAT | os.O_EXCL, 0o644, dir_fd=directory)
+            except FileExistsError:
+                fd = os.open("status.json", flags, dir_fd=directory)
+            info = os.fstat(fd)
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or info.st_nlink != 1
+                or info.st_size > STATUS_LIMIT
+            ):
+                raise ValueError("unsafe status file ownership, links or type")
+            prefix = os.read(fd, 64)
+            expected = ('{"format":"' + STATUS_FORMAT + '"').encode()
+            if info.st_size and not prefix.startswith(expected):
+                raise ValueError("refuse to overwrite an unrelated status file")
+            os.fchmod(fd, 0o644)
+            os.lseek(fd, 0, os.SEEK_SET)
+            os.ftruncate(fd, 0)
+            with os.fdopen(fd, "wb", closefd=False) as stream:
+                stream.write(payload)
+                stream.flush()
+                os.fsync(fd)
+        finally:
+            if fd is not None:
+                os.close(fd)
+            os.close(directory)
+
+    def flush(self):
+        try:
+            self.write()
+        except (OSError, ValueError):
+            # Diagnostics must never prevent an already-required service recovery.
+            print("Readable status unavailable; owner must consult the private recovery log.")
+
+
+def status_event(event, *, stage=None, error=None, returncode=None, private_log=None, numbers=None):
+    if STATUS is None:
+        return
+    if stage is not None:
+        STATUS.stage = stage
+    record = {"event": event, "stage": STATUS.stage, "time": int(time.time())}
+    if error is not None:
+        record["error_type"] = type(error).__name__
+        if isinstance(error, OSError) and isinstance(error.errno, int):
+            record["errno"] = error.errno
+        if isinstance(error, subprocess.CalledProcessError):
+            record["returncode"] = error.returncode
+        trace = error.__traceback__
+        while trace is not None:
+            if trace.tb_frame.f_code.co_filename == __file__:
+                record["function"] = trace.tb_frame.f_code.co_name
+                record["line"] = trace.tb_lineno
+            trace = trace.tb_next
+        # Only these fixed messages may cross into the readable log.
+        safe = {
+            "artifact digest mismatch",
+            "MAX deployment drop-in already exists",
+            "service differs from the reviewed system unit",
+            "runtime/data paths differ from the reviewed main install",
+            "runtime/data ownership differs from adminuser UID1002",
+            "expected the current system service to be active",
+            "external mutable state is outside backup coverage",
+            "nested mount is outside backup coverage",
+            "unsupported special file in state",
+            "backup and restored trees must share a filesystem for retained renames",
+            "backup root must be root-owned mode 0700, not a symlink",
+            "backup root must be a real directory",
+        }
+        record["reason"] = (
+            str(error) if type(error) is ValueError and str(error) in safe else "text withheld"
+        )
+    if returncode is not None:
+        record["returncode"] = int(returncode)
+    if private_log is not None:
+        STATUS.private_log = str(private_log)
+    if numbers is not None:
+        record["bytes"] = {key: int(value) for key, value in numbers.items()}
+    STATUS.events.append(record)
+    STATUS.events = STATUS.events[-STATUS_EVENTS:]
+    STATUS.flush()
+
+
+@contextmanager
+def defer_status():
+    logger = STATUS
+    if logger is not None:
+        logger.deferred += 1
+    try:
+        yield
+    finally:
+        if logger is not None:
+            logger.deferred -= 1
+            logger.flush()
 
 
 class ChildStillRunning(RuntimeError):
@@ -64,6 +218,7 @@ def verify_digest(path, expected):
 
 
 def run(args):
+    status_event("subprocess_start")
     child = subprocess.Popen(
         args,
         stdin=subprocess.DEVNULL,
@@ -74,6 +229,7 @@ def run(args):
     )
     try:
         result = child.wait(timeout=1800)
+        status_event("subprocess_exit", returncode=result)
         if result:
             raise subprocess.CalledProcessError(result, args)
     except BaseException:
@@ -195,6 +351,7 @@ def space_report():
 
 def require_space():
     report = space_report()
+    status_event("space", numbers=report)
     if report["shortfall_bytes"]:
         raise ValueError(
             "insufficient space for verified backup and retained rollback state: "
@@ -202,6 +359,7 @@ def require_space():
         )
 
 
+@defer_status()
 def archive_tree(root, archive):
     run(
         [
@@ -234,6 +392,7 @@ def archive_tree(root, archive):
     )
 
 
+@defer_status()
 def restore_tree(root, archive, saved):
     if saved.exists() or saved.is_symlink():
         raise FileExistsError("retained failed state already exists")
@@ -337,19 +496,24 @@ def validate_backup(backup):
 
 
 def rollback(backup):
+    status_event("stage", stage="rollback_validate")
     validate_backup(backup)
     if any((backup / name).exists() for name in ("failed-state", "failed-runtime")):
         raise ValueError("recovery was already attempted; retained state must not be overwritten")
     stop_service()
+    status_event("stage", stage="rollback_state")
     restore_tree(STATE, backup / "state.tar", backup / "failed-state")
+    status_event("stage", stage="rollback_runtime")
     restore_tree(RUNTIME, backup / "runtime.tar", backup / "failed-runtime")
     remove_dropin()
     run([SYSTEMCTL, "daemon-reload"])
     run([SYSTEMCTL, "start", UNIT])
     wait_health("0.13.1")
+    status_event("recovery_complete", stage="rollback_ready")
 
 
 def apply():
+    status_event("stage", stage="artifact_check")
     verify_digest(WHEEL, WHEEL_SHA)
     if CURRENT.resolve() != RUNTIME or RUNTIME.is_symlink() or STATE.is_symlink():
         raise ValueError("runtime/data paths differ from the reviewed main install")
@@ -357,6 +521,7 @@ def apply():
         raise ValueError("runtime/data ownership differs from adminuser UID1002")
     if DROPIN.exists() or DROPIN.is_symlink():
         raise FileExistsError("MAX deployment drop-in already exists")
+    status_event("stage", stage="service_check")
     info = service_info()
     check_service(info)
     if (
@@ -366,34 +531,46 @@ def apply():
         or int(info["MainPID"]) == 0
     ):
         raise ValueError("expected the current system service to be active")
+    status_event("stage", stage="baseline_ready")
     wait_health("0.13.1")
     if BASE.stat().st_dev != STATE.stat().st_dev or BASE.stat().st_dev != RUNTIME.stat().st_dev:
         raise ValueError("backup and restored trees must share a filesystem for retained renames")
+    status_event("stage", stage="space_check")
     require_space()
     backup = Path(tempfile.mkdtemp(prefix="main-", dir=BASE))
     global LOG
     with (backup / "operations.log").open("xb") as LOG:
+        status_event("private_log", private_log=backup / "operations.log")
         stopped = False
         mutated = False
         try:
+            status_event("stage", stage="stop_service")
             stop_service()
             stopped = True
             require_space()
+            status_event("stage", stage="archive_state")
             archive_tree(STATE, backup / "state.tar")
+            status_event("stage", stage="archive_runtime")
             archive_tree(RUNTIME, backup / "runtime.tar")
             manifest = {name: digest(backup / name) for name in ("state.tar", "runtime.tar")}
             manifest["wheel_sha256"] = WHEEL_SHA
             with (backup / "manifest.json").open("x") as stream:
                 json.dump(manifest, stream)
+            status_event("stage", stage="backup_validate")
             validate_backup(backup)
             require_idle()
             mutated = True
+            status_event("stage", stage="install_package")
             install_package()
+            status_event("stage", stage="write_dropin")
             write_dropin()
+            status_event("stage", stage="start_service")
             run([SYSTEMCTL, "daemon-reload"])
             run([SYSTEMCTL, "start", UNIT])
+            status_event("stage", stage="candidate_ready")
             wait_health("0.14.0")
         except BaseException as exc:
+            status_event("apply_error", error=exc)
             print(f"Private recovery files: {backup}")
             if isinstance(exc, ChildStillRunning):
                 raise
@@ -420,6 +597,22 @@ def main():
     if args.space_report:
         print(json.dumps(space_report(), indent=2))
         return
+    global STATUS
+    STATUS = StatusLog()
+    try:
+        STATUS.write()
+        status_event("start")
+        owner_operation(args)
+        status_event("success")
+    except BaseException as exc:
+        status_event("error", error=exc)
+        raise
+    finally:
+        STATUS = None
+
+
+def owner_operation(args):
+    status_event("stage", stage="private_backup_root")
     os.umask(0o077)
     BASE.mkdir(mode=0o700, exist_ok=True)
     if BASE.is_symlink() or BASE.stat().st_uid != 0 or stat.S_IMODE(BASE.stat().st_mode) != 0o700:
