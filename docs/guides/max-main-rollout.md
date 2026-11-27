@@ -1,4 +1,78 @@
-# MAX on main: scoped recovery review
+# MAX on main: focused 0.13.1 backport
+
+## Current route: review the channel patch, not the installer
+
+The owner stopped development of the full upgrade/backup helper. Preserve it
+as historical work; do not run it for this route. The 28GiB reservation came
+from our excessive whole-Crew rollback design, not from MAX.
+
+The implementation for review is
+[`compat/max-0.13.1.patch`](../../compat/max-0.13.1.patch), with exact base-file
+SHA256 values in
+[`compat/max-0.13.1-base.json`](../../compat/max-0.13.1-base.json).
+It targets the public Python sources of the installed 0.13.1 distribution:
+28 files, 1284 added lines and one removed line. Existing files receive only
+MAX registration, config, credential filtering, routes and sandbox state fences.
+New files hold the existing MAX adapter, owner pairing and scoped CA.
+No 0.14 migration, dependency, installer, runtime-selection or workspace change
+is part of this patch. This is a source patch, not an installable release.
+
+### Why this route
+
+The installed `channels.builtin_channel_descriptors` is a fixed tuple of core
+channels. The [channel-plugin RFC](../request-for-change/rfc-channel-plugin-architecture.md)
+explicitly marks installable channel discovery and generic channel settings as
+unfinished. The installed `apps.context.AppContext` offers app turns and slots,
+but no channel registration or vault credential injection seam. An app or an
+external API bridge is therefore not a drop-in MAX channel using the existing
+secret. No credential extraction or direct vault access is proposed.
+
+Two compatibility details were verified against copied 0.13.1 code. Its
+`source_providers.is_owner_dashboard_request` already implements the strict
+host-owner predicate; the patch imports that function instead of the newer
+`is_host_owner_dashboard_request` name. Its sandbox no-alias set uses a different
+layout; the patch adds MAX without adding unrelated newer leaves. The webhook
+test now checks the method map used by both versions rather than a 0.14-only
+helper name.
+
+### Proof and remaining boundary
+
+An unmodified 0.13.1 source copy fails the pairing test with
+`ModuleNotFoundError: kiro_crew.max`. The patch applies with `git apply --check`
+and without fuzz to fresh copies of all 28 exact public source files. The
+result matches the tested source copy byte-for-byte. On that isolated code,
+57 MAX channel, webhook and TLS tests pass. The BPMN/SVG repository-path test
+is excluded from this version-specific run. No real bot, secret, receiver,
+native sandbox, service stop or live installation was exercised.
+
+The running gateway has already imported its channel registry, config classes
+and route table. A config save cannot load this new Python channel. Installing
+a reviewed 0.13.1-based distribution and starting that code requires an explicit
+owner lifecycle window; do not inject modules into the running gateway.
+Package/release review is still required: this patch does not change the signed
+updater or authorize another installation route. The base manifest pins the
+exact files, not every build input of an upstream 0.13.1 source checkout.
+When packaging, explicitly include `max/russian_trusted_root_ca.pem` under
+`[options.package_data] kiro_crew`, retain 0.13.1 dependency metadata and verify
+the resulting wheel contents. The patch's source-copy proof does not prove that
+packaging step; no backport wheel has been built or installed.
+
+The 0.13.1 frontend stays unchanged. The backport supplies owner-authenticated
+`GET /api/max/config`, `POST /api/max/pairing` and
+`POST /api/max/subscription`; it does **not** add a Settings MAX button to that
+frontend. Pairing remains the existing five-minute, single-use `/start <code>`
+flow. A small reviewed UI hook or an owner-authenticated API client is still
+needed to issue that code. Existing `secret://bot_max_kda` remains the bot
+credential; no token re-entry or rotation is required. Production webhook
+delivery still requires the existing webhook secret and external HTTPS route;
+polling remains the documented development mode. Live pairing, commands,
+`/help` and mobile login remain unverified. No new owner install command is
+issued before review of this focused patch.
+
+The shared turn, approval and owner-pairing behavior is unchanged; the existing
+`docs/architecture/max-owner.bpmn` and adjacent SVG still describe that flow.
+
+## Historical scoped-upgrade review: not the current plan
 
 ## Proposed scope: parent review before any next owner run
 

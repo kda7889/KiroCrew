@@ -1,0 +1,1514 @@
+--- a/src/kiro_crew/channels.py
++++ b/src/kiro_crew/channels.py
+@@ -53,6 +53,7 @@
+ from kiro_crew.discord.gateway import maybe_start_discord
+ from kiro_crew.feishu.gateway import maybe_start_feishu
+ from kiro_crew.imessage.gateway import maybe_start_imessage
++from kiro_crew.max.gateway import maybe_start_max
+ from kiro_crew.messaging.registry import ChannelDescriptor
+ from kiro_crew.teams.gateway import maybe_start_teams
+ from kiro_crew.telegram.gateway import maybe_start_telegram
+@@ -66,6 +67,13 @@
+ def builtin_channel_descriptors() -> tuple[ChannelDescriptor, ...]:
+     """Every builtin channel, in governance-membership order."""
+     return (
++        ChannelDescriptor(
++            channel_type="max",
++            start=maybe_start_max,
++            credentials=("MAX_BOT_TOKEN",),
++            restart_credentials=("MAX_WEBHOOK_SECRET",),
++            boot_keys=frozenset({"enabled", "allowed_user_ids", "delivery_mode"}),
++        ),
+         ChannelDescriptor(
+             channel_type="slack",
+             start=None,
+--- a/src/kiro_crew/config/loader_config.py
++++ b/src/kiro_crew/config/loader_config.py
+@@ -128,6 +128,7 @@
+     _meta,
+     coerce_effort,
+ )
++from kiro_crew.config.sections_max import MaxConfig
+ from kiro_crew.effort import is_valid_effort, model_supports_effort
+ 
+ logger = logging.getLogger("kiro_crew.config.loader")
+@@ -293,6 +294,9 @@
+     wecom: WeComConfig = field(
+         default_factory=WeComConfig,
+         metadata=_meta("WeCom", "WeCom (企业微信) AI-bot integration settings.", tags=["wecom"]),
++    )
++    max: MaxConfig = field(
++        default_factory=MaxConfig, metadata=_meta("MAX", "Owner-only MAX channel.")
+     )
+     telegram: TelegramConfig = field(
+         default_factory=TelegramConfig,
+@@ -725,6 +729,7 @@
+             "memory": asdict(self.memory),
+             "slack": asdict(self.slack),
+             "publish": asdict(self.publish),
++            "max": asdict(self.max),
+             "telegram": asdict(self.telegram),
+             "discord": asdict(self.discord),
+             "webex": asdict(self.webex),
+--- a/src/kiro_crew/config/loader_credentials.py
++++ b/src/kiro_crew/config/loader_credentials.py
+@@ -84,6 +84,8 @@
+ CRED_KIRO_API_KEY = "KIRO_API_KEY"
+ 
+ CREDENTIAL_KEYS = (
++    "MAX_BOT_TOKEN",
++    "MAX_WEBHOOK_SECRET",
+     CRED_SLACK_APP_TOKEN,
+     CRED_SLACK_BOT_TOKEN,
+     CRED_OWNER_ID,
+@@ -114,6 +116,8 @@
+ # (``KIRO_API_KEY``, ``AZURE_DEVOPS_EXT_PAT``): a child cannot resolve a reference.
+ VAULT_CHANNEL_CREDENTIAL_KEYS: frozenset[str] = frozenset(
+     {
++        "MAX_BOT_TOKEN",
++        "MAX_WEBHOOK_SECRET",
+         CRED_SLACK_APP_TOKEN,
+         CRED_SLACK_BOT_TOKEN,
+         CRED_WECOM_SECRET,
+--- a/src/kiro_crew/config/loader_pipeline.py
++++ b/src/kiro_crew/config/loader_pipeline.py
+@@ -144,6 +144,7 @@
+     _validate_activation,
+     coerce_effort,
+ )
++from kiro_crew.config.sections_max import MaxConfig
+ from kiro_crew.config.superseded_defaults import SupersededDefault, auto_adoptable
+ from kiro_crew.config.validation import _CONFIG_CACHE
+ from kiro_crew.config.validation import validate_config_data as _validate_config_data
+@@ -1221,6 +1222,17 @@
+         telemetry=_build_telemetry_config(telemetry_data),
+         memory=_build_memory_config(memory_data),
+         knowledge=_build_knowledge_config(knowledge_data),
++        max=MaxConfig(
++            delivery_mode=_sections.SectionReader(
++                MaxConfig, _coerced_section(data, "max", _degraded)
++            ).get("delivery_mode"),
++            enabled=_sections.SectionReader(
++                MaxConfig, _coerced_section(data, "max", _degraded)
++            ).read("enabled", _safe_bool),
++            allowed_user_ids=_sections.SectionReader(
++                MaxConfig, _coerced_section(data, "max", _degraded)
++            ).get("allowed_user_ids"),
++        ),
+         telegram=_build_telegram_config(telegram_data),
+         weixin=_build_weixin_config(weixin_data),
+         whatsapp=_build_whatsapp_config(whatsapp_data),
+--- a/src/kiro_crew/config/resolution.py
++++ b/src/kiro_crew/config/resolution.py
+@@ -48,6 +48,7 @@
+         "slack",
+         "publish",
+         "telegram",
++        "max",
+         "discord",
+         "webex",
+         "wakatime",
+--- /dev/null
++++ b/src/kiro_crew/config/sections_max.py
+@@ -0,0 +1,23 @@
++"""MAX is disabled by default and has exactly one numeric owner."""
++
++from dataclasses import dataclass, field
++
++from kiro_crew.config.fields import _meta
++
++
++@dataclass
++class MaxConfig:
++    enabled: bool = field(
++        default=False, metadata=_meta("Enabled", "Enable the owner-only MAX channel.")
++    )
++    delivery_mode: str = field(
++        default="polling",
++        metadata=_meta(
++            "Delivery mode",
++            "polling for development; webhook for production. Subscription is configured separately.",
++        ),
++    )
++    allowed_user_ids: list[int] = field(
++        default_factory=list,
++        metadata=_meta("Owner", "Exactly one numeric owner. Empty denies everyone until paired."),
++    )
+--- a/src/kiro_crew/constants.py
++++ b/src/kiro_crew/constants.py
+@@ -1681,6 +1681,7 @@
+ #: partially-initialized ``hooks``. This module imports only ``os`` and ``re``, so
+ #: it can be read from anywhere. ``messaging.link`` re-exports both names.
+ CHANNEL_SESSION_NAMESPACES: tuple[str, ...] = (
++    "max",
+     SLACK_NAMESPACE,
+     "discord",
+     "telegram",
+--- /dev/null
++++ b/src/kiro_crew/dashboard/handlers/max_pairing.py
+@@ -0,0 +1,120 @@
++"""A signed-in dashboard owner issues an ephemeral MAX pairing code."""
++
++import asyncio
++
++from aiohttp import web
++
++from kiro_crew.dashboard.handlers._shared import require_owner_dashboard_request
++from kiro_crew.dashboard.handlers.source_providers import (
++    is_owner_dashboard_request as is_host_owner_dashboard_request,
++)
++from kiro_crew.dashboard.origin import check_origin
++from kiro_crew.sel import sel
++
++
++async def api_max_config(request):
++    denied = await require_owner_dashboard_request(request, "max.config.read")
++    if denied is not None:
++        return denied
++    if request.get("app") or not is_host_owner_dashboard_request(request):
++        return web.json_response({"error": "owner_only"}, status=403)
++    from kiro_crew.config.loader import KiroCrewConfig
++    from kiro_crew.max.access import OwnerAccess
++
++    cfg = await asyncio.to_thread(KiroCrewConfig.load)
++    state = request.app.get("state")
++    transport = state.channel_transports.get("max") if state else None
++    owner = OwnerAccess.numeric_owner(cfg.max.allowed_user_ids)
++    return web.json_response(
++        {
++            "connected": False,
++            "configured": bool(owner),
++            "enabled": cfg.max.enabled,
++            "delivery_mode": cfg.max.delivery_mode,
++            "owner_id": str(owner) if owner else "",
++            "ready": bool(cfg.max.enabled and transport),
++        },
++        headers={"Cache-Control": "no-store"},
++    )
++
++
++async def api_max_subscribe(request):
++    denied = await require_owner_dashboard_request(request, "max.subscription.register")
++    if denied is not None:
++        return denied
++    if (
++        request.get("app")
++        or not is_host_owner_dashboard_request(request)
++        or not check_origin(request, require=True)
++    ):
++        return web.json_response({"error": "owner_origin_required"}, status=403)
++    from kiro_crew.config.loader import KiroCrewConfig
++    from kiro_crew.max.webhook import subscription_url
++
++    cfg = await asyncio.to_thread(KiroCrewConfig.load)
++    state = request.app.get("state")
++    transport = state.channel_transports.get("max") if state else None
++    service = getattr(transport, "webhook", None)
++    if (
++        not cfg.max.enabled
++        or cfg.max.delivery_mode != "webhook"
++        or transport is None
++        or service is None
++    ):
++        return web.json_response({"error": "max_webhook_not_ready"}, status=409)
++    try:
++        url = subscription_url(cfg.dashboard.url)
++    except ValueError:
++        return web.json_response({"error": "external_https_443_required"}, status=409)
++    try:
++        result = await transport.client.request(
++            "POST",
++            "/subscriptions",
++            body={
++                "url": url,
++                "update_types": ["message_created", "message_callback", "bot_started"],
++                "secret": service.secret,
++            },
++        )
++    except RuntimeError:
++        return web.json_response({"error": "max_subscription_failed"}, status=502)
++    if result.get("success") is not True:
++        return web.json_response({"error": "max_subscription_failed"}, status=502)
++    sel().log_api_access(
++        caller=request.get("user", ""),
++        operation="max.subscription.register",
++        outcome="ok",
++        source="dashboard",
++    )
++    return web.json_response({"ok": True}, headers={"Cache-Control": "no-store"})
++
++
++async def api_max_pairing(request):
++    denied = await require_owner_dashboard_request(request, "max.pairing.issue")
++    if denied is not None:
++        return denied
++    if (
++        request.get("app")
++        or not check_origin(request, require=True)
++        or not is_host_owner_dashboard_request(request)
++    ):
++        return web.json_response({"error": "owner_origin_required"}, status=403)
++    state = request.app.get("state")
++    transport = state.channel_transports.get("max") if state else None
++    if transport is None:
++        return web.json_response({"error": "max_not_started"}, status=409)
++    await transport._refresh()
++    try:
++        code = transport.access.issue()
++    except ValueError:
++        return web.json_response({"error": "owner_already_configured"}, status=409)
++    sel().log_api_access(
++        caller=request.get("user", ""),
++        operation="max.pairing.issue",
++        outcome="ok",
++        source="dashboard",
++    )
++    return web.json_response(
++        {"code": code, "expires_in": 300, "attempts": 5},
++        headers={"Cache-Control": "no-store"},
++    )
+--- a/src/kiro_crew/dashboard/routes/connections.py
++++ b/src/kiro_crew/dashboard/routes/connections.py
+@@ -37,6 +37,18 @@
+ 
+ def register(app: web.Application) -> None:
+     """Register the connections routes on *app*."""
++    from kiro_crew.dashboard.handlers.max_pairing import (
++        api_max_config,
++        api_max_pairing,
++        api_max_subscribe,
++    )
++    from kiro_crew.dashboard.token_auth_paths import MAX_WEBHOOK_PATH
++    from kiro_crew.max.webhook import api_max_webhook
++
++    app.router.add_post(MAX_WEBHOOK_PATH, api_max_webhook)
++    app.router.add_post("/api/max/pairing", api_max_pairing)
++    app.router.add_get("/api/max/config", api_max_config)
++    app.router.add_post("/api/max/subscription", api_max_subscribe)
+     # SSO login WS: an edition may supply the real login handler (CPP
+     # DashboardContributor.sso_login_handler); the public Default returns None so the
+     # built-in stub stays bound. Fail-closed via the canonical safe_context_call.
+--- a/src/kiro_crew/dashboard/token_auth_paths.py
++++ b/src/kiro_crew/dashboard/token_auth_paths.py
+@@ -129,6 +129,7 @@
+ #: check in ``server``), and a hand-copied second spelling is how one control
+ #: ends up pointed at a route the other is not.
+ TEAMS_WEBHOOK_PATH = "/api/messaging/teams"
++MAX_WEBHOOK_PATH = "/api/messaging/max"
+ 
+ #: The inbound agent webhook route, named once for exactly the same reason
+ #: :data:`TEAMS_WEBHOOK_PATH` is: the same two independent middleware exemptions
+@@ -169,6 +170,7 @@
+ RELAY_VIEWER_TOKEN_PATH = "/api/relay-viewer/token"
+ 
+ _BYPASS_EXACT_METHODS: dict[str, frozenset[str]] = {
++    MAX_WEBHOOK_PATH: _SELF_AUTH_WEBHOOK_METHODS,
+     AGENT_HOOK_PATH: _SELF_AUTH_WEBHOOK_METHODS,
+     AGENT_HOOK_STATUS_PATH: frozenset({"GET"}),
+     CREW_OAUTH_CALLBACK_PATH: frozenset({"GET"}),
+@@ -212,6 +214,7 @@
+ # token alone -- keep their Origin check even though the literal ``agent`` matches
+ # their wildcard.
+ CSRF_EXEMPT_EXACT_METHODS: dict[str, frozenset[str]] = {
++    MAX_WEBHOOK_PATH: _SELF_AUTH_WEBHOOK_METHODS,
+     TEAMS_WEBHOOK_PATH: _SELF_AUTH_WEBHOOK_METHODS,
+ }
+ 
+--- /dev/null
++++ b/src/kiro_crew/max/__init__.py
+@@ -0,0 +1 @@
++"""Owner-only MAX messaging channel."""
+--- /dev/null
++++ b/src/kiro_crew/max/access.py
+@@ -0,0 +1,74 @@
++"""Single-owner authorization and operator-issued, ephemeral pairing codes."""
++
++import asyncio
++import hashlib
++import hmac
++import secrets
++import time
++
++PAIR_TTL = 300
++PAIR_ATTEMPTS = 5
++
++
++class OwnerAccess:
++    def __init__(self, ids, save, *, clock=time.monotonic):
++        self.owner = self.numeric_owner(ids)
++        self._configured = not (isinstance(ids, list) and ids == [])
++        self._save = save
++        self._clock = clock
++        self._digest = None
++        self._expires = 0
++        self._attempts = 0
++        self._lock = asyncio.Lock()
++
++    @staticmethod
++    def numeric_owner(ids):
++        return (
++            ids[0]
++            if isinstance(ids, list) and len(ids) == 1 and type(ids[0]) is int and ids[0] > 0
++            else None
++        )
++
++    def reload(self, ids, *, enabled):
++        self.owner = self.numeric_owner(ids) if enabled else None
++        self._configured = not (enabled and isinstance(ids, list) and ids == [])
++        if self._configured:
++            self._digest = None
++
++    def allowed(self, uid):
++        return type(uid) is int and uid > 0 and uid == self.owner
++
++    def issue(self):
++        if self._configured or self.owner is not None:
++            raise ValueError("Remove the configured owner before pairing")
++        code = secrets.token_urlsafe(24)
++        self._digest = hashlib.sha256(code.encode()).digest()
++        self._expires = self._clock() + PAIR_TTL
++        self._attempts = 0
++        return code
++
++    async def claim(self, uid, code):
++        async with self._lock:
++            if (
++                self.owner is not None
++                or self._digest is None
++                or type(uid) is not int
++                or uid <= 0
++                or not isinstance(code, str)
++            ):
++                return False
++            self._attempts += 1
++            valid = (
++                self._clock() < self._expires
++                and self._attempts <= PAIR_ATTEMPTS
++                and hmac.compare_digest(self._digest, hashlib.sha256(code.encode()).digest())
++            )
++            if valid or self._attempts >= PAIR_ATTEMPTS or self._clock() >= self._expires:
++                self._digest = None
++            if not valid:
++                return False
++            # Consume before persistence; a failed save must never grant access.
++            self._save(uid)
++            self.owner = uid
++            self._configured = True
++            return True
+--- /dev/null
++++ b/src/kiro_crew/max/client.py
+@@ -0,0 +1,125 @@
++"""MAX HTTPS API and durable, post-handler polling checkpoints."""
++
++import asyncio
++import hashlib
++import json
++import ssl
++from pathlib import Path
++from typing import Any, TypedDict
++
++API_ORIGIN = "https://platform-api2.max.ru"
++
++
++def _max_ssl_context() -> ssl.SSLContext:
++    """Extend only MAX's trust with its documented CA; retain all TLS checks."""
++    context = ssl.create_default_context()
++    context.load_verify_locations(
++        cafile=str(Path(__file__).with_name("russian_trusted_root_ca.pem"))
++    )
++    return context
++
++
++class PollState(TypedDict):
++    marker: int | None
++    seen: list[str]
++
++
++class MaxClient:
++    def __init__(self, token, cursor, receive):
++        self._token = token
++        self.cursor = Path(cursor)
++        self.receive = receive
++        self._http = None
++        self._task = None
++        self.on_close = None
++        self.dispatcher: Any = None
++        self._state: PollState = {"marker": None, "seen": []}
++        if self.cursor.exists():
++            self._state = json.loads(self.cursor.read_text(encoding="utf-8"))
++        self.marker = self._state["marker"]
++
++    def _checkpoint(self, state):
++        self.cursor.parent.mkdir(parents=True, exist_ok=True)
++        staged = self.cursor.with_suffix(".new")
++        staged.write_text(json.dumps(state), encoding="utf-8")
++        staged.replace(self.cursor)
++        self._state = state
++        self.marker = state["marker"]
++
++    async def handle_page(self, page):
++        for update in page.get("updates", []):
++            # Fingerprints retain no message content, pairing codes or callbacks.
++            key = hashlib.sha256(json.dumps(update, sort_keys=True).encode()).hexdigest()
++            if key in self._state["seen"]:
++                continue
++            await self.receive(update)
++            self._checkpoint({"marker": self.marker, "seen": (self._state["seen"] + [key])[-4096:]})
++        self._checkpoint({"marker": page["marker"], "seen": self._state["seen"]})
++
++    async def request(self, method, path, *, params=None, body=None):
++        if self._http is None:
++            import aiohttp
++
++            self._http = aiohttp.ClientSession(
++                timeout=aiohttp.ClientTimeout(total=100),
++                connector=aiohttp.TCPConnector(ssl=_max_ssl_context()),
++            )
++        # Never put credentials in URLs, exceptions, reprs or logs.
++        try:
++            async with self._http.request(
++                method,
++                API_ORIGIN + path,
++                params=params,
++                json=body,
++                headers={"Authorization": self._token},
++                allow_redirects=False,
++            ) as response:
++                if response.status != 200:
++                    raise RuntimeError(f"MAX API status {response.status}")
++                return await response.json()
++        except asyncio.CancelledError:
++            raise
++        except Exception:  # noqa: BLE001 -- never expose a vendor body or credential in an error
++            raise RuntimeError("MAX request failed") from None
++
++    async def send(self, uid, text, **kwargs):
++        result = await self.request(
++            "POST", "/messages", params={"user_id": uid}, body={"text": text}
++        )
++        return result["message"]["body"]["mid"]
++
++    async def answer(self, cid, text):
++        await self.request(
++            "POST", "/answers", params={"callback_id": cid}, body={"notification": text}
++        )
++
++    async def chat_type(self, cid):
++        result = await self.request("GET", f"/chats/{int(cid)}")
++        return result.get("type")
++
++    async def poll(self):
++        while True:
++            try:
++                params = {
++                    "timeout": 30,
++                    "limit": 100,
++                    "types": "message_created,message_callback,bot_started",
++                }
++                if self.marker is not None:
++                    params["marker"] = self.marker
++                await self.handle_page(await self.request("GET", "/updates", params=params))
++            except asyncio.CancelledError:
++                raise
++            except Exception:  # noqa: BLE001 -- retain the checkpoint and retry a failed page
++                await asyncio.sleep(5)
++
++    async def close(self):
++        if self._task:
++            self._task.cancel()
++            await asyncio.gather(self._task, return_exceptions=True)
++        if self._http:
++            await self._http.close()
++        if getattr(self, "dispatcher", None):
++            await self.dispatcher.close()
++        if self.on_close:
++            self.on_close()
+--- /dev/null
++++ b/src/kiro_crew/max/dispatch.py
+@@ -0,0 +1,190 @@
++"""Small MAX adapter around shared command, session, turn and approval logic."""
++
++import asyncio
++
++from kiro_crew.agent_switch_command import (
++    ChannelAgentPicks,
++    handle_channel_agent_command,
++)
++from kiro_crew.max.renderer import MaxRenderer
++from kiro_crew.messaging.approval import (
++    TextReplyApprovalDecider,
++    deliver_verdict,
++    parse_approval_reply,
++    pending_for,
++)
++from kiro_crew.messaging.conversation import ConversationState, reserve_new_generation
++from kiro_crew.messaging.dispatch import ChannelTurn, drive_turn
++from kiro_crew.messaging.inbound_spool import InboundRoute
++from kiro_crew.messaging.link import build_dm_session_key, seed_generation
++from kiro_crew.start_priority import person_priority
++
++HELP = "/help /agent [name] /new /stop /sessions /web /mobile\nApprovals: /approve or /deny."
++
++
++class MaxDispatcher:
++    def __init__(self, sessions, ctx_builder, cfg, conv_log=None):
++        self.sessions = sessions
++        self.ctx_builder = ctx_builder
++        self.cfg = cfg
++        self.conv_log = conv_log
++        self.transport = None
++        self.dashboard_owner = lambda: None
++        self.picks = ChannelAgentPicks()
++        self._conv = ConversationState(seed_fn=self._seed, bucket_fn=self._agent)
++        self._turns = {}
++
++    def _agent(self, uid):
++        return self.picks.resolve(uid, self.cfg.agent.default)
++
++    def _seed(self, uid):
++        return seed_generation(
++            self.sessions,
++            channel="max",
++            agent=self._agent(uid),
++            user_id=uid,
++            dm_scope="per-channel-peer",
++        )
++
++    def _key(self, uid):
++        return build_dm_session_key(
++            "max",
++            self._agent(uid),
++            uid,
++            gen=self._conv.current_gen(uid),
++            dm_scope="per-channel-peer",
++        )
++
++    async def handle_message(self, inbound):
++        transport = self.transport
++        if transport is None:
++            return
++        if not transport.authorize(inbound):
++            return
++        from kiro_crew.messaging.identity import channel_inbound_permitted
++
++        if not await channel_inbound_permitted("max"):
++            return
++        uid = inbound.user_id
++        # Help and login do not require a session or provider.
++        text = inbound.text.strip()
++        command, _, arg = text.partition(" ")
++        if command == "/help":
++            await transport.send_message(uid, HELP)
++            return
++        if command in ("/web", "/mobile"):
++            from kiro_crew.max.login import login_link
++
++            try:
++                link = login_link(self.cfg.dashboard.url, int(uid), self.dashboard_owner())
++            except ValueError as exc:
++                await transport.send_message(uid, str(exc))
++            else:
++                # Deliberate credential delivery, like Telegram's login command.
++                await transport.client.send(int(uid), link)
++            return
++        key = self._key(uid)
++        if command in ("/approve", "/deny"):
++            verdict = "approve" if command == "/approve" else "deny"
++            receipt = deliver_verdict(key, verdict, uid, sessions=self.sessions)
++            await transport.send_message(uid, receipt)
++            return
++        if pending_for(key, uid):
++            verdict = parse_approval_reply(text)
++            if verdict:
++                receipt = deliver_verdict(key, verdict, uid, sessions=self.sessions)
++                await transport.send_message(uid, receipt)
++                return
++            await transport.send_message(uid, "Use /approve or /deny for the pending tool.")
++            if command != "/stop":
++                return
++        if command == "/stop":
++            from kiro_crew.messaging.commands import note_user_stop
++
++            note_user_stop(self.sessions, key)
++            await self.sessions.stop_turn(key)
++            task = self._turns.get(uid)
++            if task and not task.done():
++                task.cancel()
++            await transport.send_message(uid, "Stop requested.")
++            return
++        if uid in self._turns and not self._turns[uid].done():
++            await transport.send_message(uid, "A reply is running. Use /stop first.")
++            return
++        if command == "/agent":
++            reply = await handle_channel_agent_command(
++                self.picks,
++                uid,
++                arg,
++                conv=self._conv,
++                configured=self.cfg.agent.default,
++                sessions=self.sessions,
++                session_key=lambda: self._key(uid),
++            )
++            await transport.send_message(uid, reply)
++            return
++        if command == "/new":
++            self._conv.bump_gen(uid)
++            saved = await reserve_new_generation(self.sessions, self._key(uid), channel_type="max")
++            await transport.send_message(uid, "New session." if saved else "Session save failed.")
++            return
++        if command == "/sessions":
++            from kiro_crew.messaging.sessions_view import (
++                _collect_recent_sessions_off_loop,
++            )
++
++            rows = await _collect_recent_sessions_off_loop(
++                self.sessions, limit=50, with_messages=False
++            )
++            own = [row for row in rows if row["key"].startswith("max:")]
++            text = "\n".join(f"{row['key']} — {row['title']}" for row in own[:10])
++            await transport.send_message(
++                uid,
++                f"Current session: {key}\n{text}\nUse /agent to switch; /new to start.",
++            )
++            return
++        renderer = MaxRenderer(transport, uid, key)
++        turn = ChannelTurn(
++            channel_type="max",
++            session_key=key,
++            conversation_id=f"max:{uid}",
++            agent=self._agent(uid),
++            user_text=text,
++            renderer=renderer,
++            approval_mode="interactive",
++            decider=TextReplyApprovalDecider(key, self.sessions),
++            inbound_route=InboundRoute(conversation_id=uid, user_id=uid, text=text),
++            start_priority=person_priority(inbound.person_origin),
++            still_admitted=lambda: transport.access.allowed(int(uid)),
++            persist=lambda user, reply, new: self._persist(key, user, reply, self._agent(uid)),
++        )
++        started = asyncio.Event()
++
++        async def run():
++            started.set()
++            try:
++                await drive_turn(turn, sessions=self.sessions, ctx_builder=self.ctx_builder)
++            except asyncio.CancelledError:
++                raise
++            except Exception:  # noqa: BLE001 -- report a fixed error without provider secrets
++                await transport.send_message(uid, "MAX turn failed. Check the dashboard.")
++            finally:
++                entry = pending_for(key, uid)
++                if entry:
++                    deliver_verdict(key, "deny", uid)
++
++        self._turns[uid] = asyncio.create_task(run())
++        await started.wait()
++
++    def _persist(self, key, user, reply, agent):
++        if self.conv_log:
++            from kiro_crew.history import mint_row_mid
++
++            self.conv_log.append(key, "user", user, agent=agent, mid=mint_row_mid())
++            if reply:
++                self.conv_log.append(key, "assistant", reply, agent=agent, mid=mint_row_mid())
++
++    async def close(self):
++        for task in self._turns.values():
++            task.cancel()
++        await asyncio.gather(*self._turns.values(), return_exceptions=True)
+--- /dev/null
++++ b/src/kiro_crew/max/gateway.py
+@@ -0,0 +1,88 @@
++"""Factory for the governed channel registry. No listening socket is opened."""
++
++import asyncio
++import json
++import re
++
++from kiro_crew.config.loader import KiroCrewConfig
++from kiro_crew.config.loader_document import update_config_locked
++from kiro_crew.config.loader_locations import config_local_path
++from kiro_crew.config.paths import data_home
++from kiro_crew.max.access import OwnerAccess
++from kiro_crew.max.client import MaxClient
++from kiro_crew.max.dispatch import MaxDispatcher
++from kiro_crew.max.transport import MaxTransport
++
++
++async def maybe_start_max(orch):
++    if not getattr(orch, "_max_enabled", False):
++        return None
++    mode = orch._cfg.max.delivery_mode
++    secret = getattr(orch, "_max_webhook_secret", "")
++    if mode not in ("polling", "webhook"):
++        return None
++    if mode == "webhook" and not re.fullmatch(r"[A-Za-z0-9_-]{32,256}", secret):
++        return None
++
++    def save(uid):
++        overlay = config_local_path()
++        if overlay.exists() and "max" in json.loads(overlay.read_text(encoding="utf-8")):
++            raise ValueError("Move MAX settings to the base config before pairing")
++
++        def mutate(data):
++            section = data.setdefault("max", {})
++            if section.get("allowed_user_ids"):
++                raise ValueError("MAX owner already configured")
++            if not section.get("enabled"):
++                raise ValueError("MAX disabled")
++            section["allowed_user_ids"] = [uid]
++            return data
++
++        update_config_locked(mutate=mutate, fsync=True)
++
++    access = OwnerAccess(orch._cfg.max.allowed_user_ids, save)
++    dispatcher = MaxDispatcher(
++        orch.sessions, orch.ctx_builder, orch._cfg, getattr(orch, "conv_log", None)
++    )
++    dispatcher.dashboard_owner = lambda: (
++        orch.dashboard_state.owner_id if orch.dashboard_state is not None else None
++    )
++    client = MaxClient(orch._max_token, data_home() / "max" / "cursor.json", None)
++
++    async def callback(raw):
++        # No uncorrelated/stale button may approve a tool. Typed shared approvals only.
++        await client.answer(
++            raw["callback"]["callback_id"],
++            "Use /approve or /deny for the current tool.",
++        )
++
++    transport = MaxTransport(client, access, dispatcher.handle_message, callback)
++
++    async def refresh():
++        current = await asyncio.to_thread(KiroCrewConfig.load)
++        access.reload(current.max.allowed_user_ids, enabled=current.max.enabled)
++        dispatcher.cfg = current
++
++    transport.refresh = refresh
++    dispatcher.transport = transport
++    client.receive = transport.receive
++    client.dispatcher = dispatcher
++    if mode == "webhook":
++        from kiro_crew.max.webhook import MaxWebhook
++
++        transport.webhook = MaxWebhook(
++            transport, dispatcher, secret, data_home() / "max" / "inbox.sqlite"
++        )
++    if orch.dashboard_state is not None:
++        orch.dashboard_state.register_channel_transport(transport)
++
++        def unregister():
++            transports = getattr(orch.dashboard_state, "channel_transports", {})
++            if transports.get("max") is transport:
++                transports.pop("max")
++
++        client.on_close = unregister
++    client._task = asyncio.create_task(
++        transport.webhook.run() if mode == "webhook" else client.poll()
++    )
++    return client
+--- /dev/null
++++ b/src/kiro_crew/max/login.py
+@@ -0,0 +1,40 @@
++"""Existing dashboard token exchange, delivered only to the admitted MAX owner."""
++
++import ipaddress
++from urllib.parse import urlsplit
++
++
++def login_link(origin, uid, dashboard_owner):
++    if dashboard_owner is None:
++        raise ValueError("Dashboard owner state unavailable")
++    parsed = urlsplit(origin)
++    host = (parsed.hostname or "").lower().rstrip(".")
++    if (
++        parsed.scheme != "https"
++        or not host
++        or host == "localhost"
++        or host.endswith((".localhost", ".local"))
++        or parsed.username
++        or parsed.password
++        or parsed.query
++        or parsed.fragment
++        or parsed.path not in ("", "/")
++    ):
++        raise ValueError("Configure an external HTTPS dashboard.url in Settings")
++    try:
++        address = ipaddress.ip_address(host)
++    except ValueError:
++        address = None
++    if address is not None and not address.is_global:
++        raise ValueError("Configure an external HTTPS dashboard.url in Settings")
++    from kiro_crew.dashboard.token_auth import generate_token
++    from kiro_crew.dashboard.token_auth_tokens import owner_mint_extra
++    from kiro_crew.sel import sel
++
++    token = generate_token(
++        dashboard_owner or "local-app", ttl_seconds=300, extra=owner_mint_extra()
++    )
++    sel().log_api_access(
++        caller=str(uid), operation="max.dashboard_token", outcome="ok", source="max"
++    )
++    return f"{origin.rstrip('/')}/?token={token}"
+--- /dev/null
++++ b/src/kiro_crew/max/renderer.py
+@@ -0,0 +1,57 @@
++"""Plain-text MAX output and the shared typed approval ladder."""
++
++from kiro_crew.messaging.approval import (
++    abandon_approval,
++    build_approval_prompt,
++    open_approval,
++)
++from kiro_crew.messaging.renderer import SilentRenderer, render_options_as_text
++
++
++class MaxRenderer(SilentRenderer):
++    channel_type = "max"
++
++    def __init__(self, transport, uid, session_key):
++        super().__init__(transport.capabilities)
++        self.transport = transport
++        self.uid = uid
++        self.session_key = session_key
++        self._parts = []
++
++    async def on_text_chunk(self, text):
++        self._parts.append(text)
++
++    async def on_prompt_choice(
++        self, options, request_id, tool_title="", tool_purpose="", tool_input=""
++    ):
++        await self._flush()
++
++        async def timeout():
++            await self.transport.send_message(self.uid, "Approval expired; tool denied.")
++
++        open_approval(
++            self.session_key,
++            request_id,
++            tool_title=tool_title,
++            conversation_id=self.uid,
++            on_timeout=timeout,
++        )
++        try:
++            await self.transport.send_message(
++                self.uid,
++                build_approval_prompt(tool_title, tool_purpose) + "\n" + tool_input,
++            )
++        except BaseException:
++            abandon_approval(self.session_key, request_id)
++            raise
++
++    async def _flush(self):
++        if self._parts:
++            body = render_options_as_text("".join(self._parts), self.capabilities)
++            await self.transport.send_message(self.uid, body)
++            self._parts.clear()
++
++    async def on_done(self, stop_reason=""):
++        if not self._parts and self.empty_turn_notice:
++            self._parts.append(self.empty_turn_notice)
++        await self._flush()
+--- /dev/null
++++ b/src/kiro_crew/max/russian_trusted_root_ca.pem
+@@ -0,0 +1,33 @@
++-----BEGIN CERTIFICATE-----
++MIIFwjCCA6qgAwIBAgICEAAwDQYJKoZIhvcNAQELBQAwcDELMAkGA1UEBhMCUlUx
++PzA9BgNVBAoMNlRoZSBNaW5pc3RyeSBvZiBEaWdpdGFsIERldmVsb3BtZW50IGFu
++ZCBDb21tdW5pY2F0aW9uczEgMB4GA1UEAwwXUnVzc2lhbiBUcnVzdGVkIFJvb3Qg
++Q0EwHhcNMjIwMzAxMjEwNDE1WhcNMzIwMjI3MjEwNDE1WjBwMQswCQYDVQQGEwJS
++VTE/MD0GA1UECgw2VGhlIE1pbmlzdHJ5IG9mIERpZ2l0YWwgRGV2ZWxvcG1lbnQg
++YW5kIENvbW11bmljYXRpb25zMSAwHgYDVQQDDBdSdXNzaWFuIFRydXN0ZWQgUm9v
++dCBDQTCCAiIwDQYJKoZIhvcNAQEBBQADggIPADCCAgoCggIBAMfFOZ8pUAL3+r2n
++qqE0Zp52selXsKGFYoG0GM5bwz1bSFtCt+AZQMhkWQheI3poZAToYJu69pHLKS6Q
++XBiwBC1cvzYmUYKMYZC7jE5YhEU2bSL0mX7NaMxMDmH2/NwuOVRj8OImVa5s1F4U
++zn4Kv3PFlDBjjSjXKVY9kmjUBsXQrIHeaqmUIsPIlNWUnimXS0I0abExqkbdrXbX
++YwCOXhOO2pDUx3ckmJlCMUGacUTnylyQW2VsJIyIGA8V0xzdaeUXg0VZ6ZmNUr5Y
++Ber/EAOLPb8NYpsAhJe2mXjMB/J9HNsoFMBFJ0lLOT/+dQvjbdRZoOT8eqJpWnVD
++U+QL/qEZnz57N88OWM3rabJkRNdU/Z7x5SFIM9FrqtN8xewsiBWBI0K6XFuOBOTD
++4V08o4TzJ8+Ccq5XlCUW2L48pZNCYuBDfBh7FxkB7qDgGDiaftEkZZfApRg2E+M9
++G8wkNKTPLDc4wH0FDTijhgxR3Y4PiS1HL2Zhw7bD3CbslmEGgfnnZojNkJtcLeBH
++BLa52/dSwNU4WWLubaYSiAmA9IUMX1/RpfpxOxd4Ykmhz97oFbUaDJFipIggx5sX
++ePAlkTdWnv+RWBxlJwMQ25oEHmRguNYf4Zr/Rxr9cS93Y+mdXIZaBEE0KS2iLRqa
++OiWBki9IMQU4phqPOBAaG7A+eP8PAgMBAAGjZjBkMB0GA1UdDgQWBBTh0YHlzlpf
++BKrS6badZrHF+qwshzAfBgNVHSMEGDAWgBTh0YHlzlpfBKrS6badZrHF+qwshzAS
++BgNVHRMBAf8ECDAGAQH/AgEEMA4GA1UdDwEB/wQEAwIBhjANBgkqhkiG9w0BAQsF
++AAOCAgEAALIY1wkilt/urfEVM5vKzr6utOeDWCUczmWX/RX4ljpRdgF+5fAIS4vH
++tmXkqpSCOVeWUrJV9QvZn6L227ZwuE15cWi8DCDal3Ue90WgAJJZMfTshN4OI8cq
++W9E4EG9wglbEtMnObHlms8F3CHmrw3k6KmUkWGoa+/ENmcVl68u/cMRl1JbW2bM+
++/3A+SAg2c6iPDlehczKx2oa95QW0SkPPWGuNA/CE8CpyANIhu9XFrj3RQ3EqeRcS
++AQQod1RNuHpfETLU/A2gMmvn/w/sx7TB3W5BPs6rprOA37tutPq9u6FTZOcG1Oqj
++C/B7yTqgI7rbyvox7DEXoX7rIiEqyNNUguTk/u3SZ4VXE2kmxdmSh3TQvybfbnXV
++4JbCZVaqiZraqc7oZMnRoWrXRG3ztbnbes/9qhRGI7PqXqeKJBztxRTEVj8ONs1d
++WN5szTwaPIvhkhO3CO5ErU2rVdUr89wKpNXbBODFKRtgxUT70YpmJ46VVaqdAhOZ
++D9EUUn4YaeLaS8AjSF/h7UkjOibNc4qVDiPP+rkehFWM66PVnP1Msh93tc+taIfC
++EYVMxjh8zNbFuoc7fzvvrFILLe7ifvEIUqSVIC/AzplM/Jxw7buXFeGP1qVCBEHq
++391d/9RAfaZ12zkwFsl+IKwE/OZxW8AHa9i1p4GO0YSNuczzEm4=
++-----END CERTIFICATE-----
+--- /dev/null
++++ b/src/kiro_crew/max/transport.py
+@@ -0,0 +1,149 @@
++"""DM-only boundary: authorize every inbound event and every outbound target."""
++
++from kiro_crew.messaging.transport import (
++    ConfiguredChannelTarget,
++    InboundMessage,
++    MessagingTransport,
++    TransportCapabilities,
++)
++
++
++class MaxTransport(MessagingTransport):
++    channel_type = "max"
++    capabilities = TransportCapabilities(
++        streaming=False,
++        edit=False,
++        reactions=False,
++        files_inbound=False,
++        files_outbound=False,
++        rich_blocks=False,
++        threads=False,
++        max_buttons=0,
++        max_message_chars=4000,
++        supports_session_resume=False,
++    )
++
++    def __init__(self, client, access, dispatch, callback):
++        self.client = client
++        self.access = access
++        self._dispatch = dispatch
++        self._callback = callback
++        self.refresh = None
++
++    async def _refresh(self):
++        if self.refresh:
++            await self.refresh()
++
++    def authorize(self, msg):
++        return (
++            msg.user_id == msg.conversation_id
++            and msg.user_id.isdecimal()
++            and self.access.allowed(int(msg.user_id))
++        )
++
++    def configured_targets(self):
++        return (
++            [ConfiguredChannelTarget(f"user:{self.access.owner}", "MAX owner")]
++            if self.access.owner is not None
++            else []
++        )
++
++    def may_send_to(self, conversation_id, thread_id=None, *, principal=""):
++        return (
++            thread_id is None
++            and isinstance(conversation_id, str)
++            and conversation_id.isdecimal()
++            and self.access.allowed(int(conversation_id))
++        )
++
++    async def resolve_configured_target(self, target_id):
++        uid = target_id.removeprefix("user:")
++        await self._refresh()
++        return (uid, None) if target_id.startswith("user:") and self.may_send_to(uid) else None
++
++    async def resolve_conversation(self, user_id):
++        if not user_id.isdecimal() or not self.access.allowed(int(user_id)):
++            raise PermissionError("MAX target denied")
++        return user_id
++
++    async def fetch_history(self, conversation_id, thread_id=None):
++        return []
++
++    async def send_message(self, conversation_id, content, thread_id=None):
++        await self._refresh()
++        await self.resolve_conversation(conversation_id)
++        if thread_id is not None:
++            raise PermissionError("MAX groups and threads are disabled")
++        from kiro_crew.messaging.renderer import chunk_for_transport
++
++        for token in (
++            getattr(self.client, "_token", ""),
++            getattr(getattr(self, "webhook", None), "secret", ""),
++        ):
++            if token:
++                content = content.replace(token, "[REDACTED: credential]")
++        mid = ""
++        for chunk in chunk_for_transport(content, self.capabilities):
++            await self._refresh()
++            await self.resolve_conversation(conversation_id)
++            mid = await self.client.send(int(conversation_id), chunk)
++        return mid
++
++    async def receive(self, raw):
++        from kiro_crew.messaging.identity import channel_inbound_permitted
++
++        if not await channel_inbound_permitted("max"):
++            return
++        await self._refresh()
++        kind = raw.get("update_type")
++        if kind == "bot_started":
++            user = raw.get("user") or {}
++            uid = user.get("user_id")
++            # A start event lacks a recipient: verify the chat through MAX.
++            if user.get("is_bot") or await self.client.chat_type(raw.get("chat_id")) != "dialog":
++                return
++            await self._refresh()
++            await self._start(uid, raw.get("payload") or "")
++            return
++        msg = raw.get("message") or {}
++        if (msg.get("recipient") or {}).get("chat_type") != "dialog":
++            return
++        if kind == "message_callback":
++            cb = raw.get("callback") or {}
++            user = cb.get("user") or {}
++            if (
++                self.access.allowed(user.get("user_id"))
++                and not user.get("is_bot")
++                and self._callback
++            ):
++                await self._callback(raw)
++            return
++        if kind != "message_created":
++            return
++        user = msg.get("sender") or {}
++        uid = user.get("user_id")
++        if user.get("is_bot"):
++            return
++        text = (msg.get("body") or {}).get("text") or ""
++        if text == "/start" or text.startswith("/start "):
++            await self._start(uid, text.partition(" ")[2].strip())
++            return
++        if self.access.allowed(uid) and self._dispatch:
++            if not text:
++                await self.send_message(str(uid), "MAX accepts text messages only.")
++                return
++            await self._dispatch(
++                InboundMessage(
++                    channel_type="max",
++                    user_id=str(uid),
++                    conversation_id=str(uid),
++                    text=text,
++                    person_origin=True,
++                )
++            )
++
++    async def _start(self, uid, code):
++        if await self.access.claim(uid, code):
++            await self.send_message(str(uid), "MAX owner paired. Use /help.")
++        elif self.access.allowed(uid):
++            await self.send_message(str(uid), "Use /help.")
+--- /dev/null
++++ b/src/kiro_crew/max/webhook.py
+@@ -0,0 +1,320 @@
++"""Authenticated MAX ingress and a bounded durable inbox. No listener or subscription changes."""
++
++import asyncio
++import hashlib
++import hmac
++import ipaddress
++import json
++import os
++import sqlite3
++import stat
++from contextlib import contextmanager
++from urllib.parse import urlsplit
++
++from aiohttp import web
++
++from kiro_crew.dashboard.token_auth_paths import MAX_WEBHOOK_PATH
++from kiro_crew.platform_compat import open_create_no_reparse, open_file_no_reparse
++
++MAX_BODY = 65536
++
++
++def subscription_url(origin):
++    parsed = urlsplit(origin)
++    host = (parsed.hostname or "").lower().rstrip(".")
++    if (
++        parsed.scheme != "https"
++        or not host
++        or parsed.port is not None
++        or host == "localhost"
++        or host.endswith((".localhost", ".local"))
++        or parsed.username
++        or parsed.password
++        or parsed.query
++        or parsed.fragment
++        or parsed.path not in ("", "/")
++    ):
++        raise ValueError("Configure an external HTTPS dashboard.url on port 443")
++    try:
++        ip = ipaddress.ip_address(host)
++    except ValueError:
++        ip = None
++    if ip is not None and not ip.is_global:
++        raise ValueError("Configure an external HTTPS dashboard.url on port 443")
++    return origin.rstrip("/") + MAX_WEBHOOK_PATH
++
++
++class WebhookInbox:
++    def __init__(self, path):
++        self.path = path
++        path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
++        if path.parent.is_symlink():
++            raise PermissionError("MAX inbox directory must not be a link")
++        parent = path.parent.stat()
++        if os.name == "posix" and (parent.st_uid != os.getuid() or parent.st_mode & 0o022):
++            raise PermissionError("MAX inbox directory must be owner-controlled")
++        fd = open_create_no_reparse(path)
++        try:
++            self._identity = self._check(fd)
++        finally:
++            os.close(fd)
++        with self._db() as db:
++            db.execute(
++                "CREATE TABLE IF NOT EXISTS inbox (key TEXT PRIMARY KEY, body TEXT, state TEXT NOT NULL)"
++            )
++
++    @contextmanager
++    def _db(self):
++        fd = open_file_no_reparse(self.path, nonblocking=True)
++        try:
++            if self._check(fd) != self._identity:
++                raise PermissionError("MAX inbox identity changed")
++            # shortcut: SQLite reopens by name; hostile same-UID writers require OS isolation.
++            db = sqlite3.connect(self.path, timeout=1)
++            try:
++                current = self.path.lstat()
++                if (
++                    stat.S_ISLNK(current.st_mode)
++                    or (current.st_dev, current.st_ino) != self._identity
++                ):
++                    raise PermissionError("MAX inbox changed while opening")
++                with db:
++                    yield db
++            finally:
++                db.close()
++        finally:
++            os.close(fd)
++
++    @staticmethod
++    def _check(fd):
++        info = os.fstat(fd)
++        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
++            raise PermissionError("MAX inbox must be a regular file with one link")
++        if os.name == "posix" and (info.st_uid != os.getuid() or info.st_mode & 0o077):
++            raise PermissionError("MAX inbox requires owner-only permissions")
++        return info.st_dev, info.st_ino
++
++    @staticmethod
++    def key(raw):
++        kind = raw.get("update_type")
++        event_id = (
++            (raw.get("callback") or {}).get("callback_id")
++            if kind == "message_callback"
++            else ((raw.get("message") or {}).get("body") or {}).get("mid")
++        )
++        identity = [kind, event_id] if event_id else raw
++        return hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
++
++    def enqueue(self, raw):
++        key = self.key(raw)
++        with self._db() as db:
++            db.execute("BEGIN IMMEDIATE")
++            if db.execute("SELECT 1 FROM inbox WHERE key=?", (key,)).fetchone():
++                return key
++            if db.execute("SELECT count(*) FROM inbox WHERE state!='done'").fetchone()[0] >= 256:
++                raise OverflowError("MAX inbox full")
++            db.execute("INSERT INTO inbox VALUES (?, ?, 'pending')", (key, json.dumps(raw)))
++        return key
++
++    def next(self):
++        with self._db() as db:
++            row = db.execute(
++                "SELECT key, body, state FROM inbox WHERE state!='done' ORDER BY rowid LIMIT 1"
++            ).fetchone()
++        return (row[0], json.loads(row[1]), row[2]) if row else None
++
++    def mark(self, key, state):
++        with self._db() as db:
++            db.execute(
++                "UPDATE inbox SET state=?, body=CASE WHEN ?='done' THEN NULL ELSE body END WHERE key=?",
++                (state, state, key),
++            )
++            db.execute(
++                "DELETE FROM inbox WHERE state='done' AND rowid NOT IN (SELECT rowid FROM inbox WHERE state='done' ORDER BY rowid DESC LIMIT 4096)"
++            )
++
++    def body(self, key):
++        with self._db() as db:
++            row = db.execute("SELECT body FROM inbox WHERE key=?", (key,)).fetchone()
++        return row[0] if row else None
++
++    def seen(self, key):
++        with self._db() as db:
++            return (
++                db.execute("SELECT 1 FROM inbox WHERE key=? AND state='done'", (key,)).fetchone()
++                is not None
++            )
++
++    def complete_control(self, key):
++        with self._db() as db:
++            inserted = db.execute(
++                "INSERT OR IGNORE INTO inbox VALUES (?, NULL, 'done')", (key,)
++            ).rowcount
++            db.execute(
++                "DELETE FROM inbox WHERE state='done' AND rowid NOT IN (SELECT rowid FROM inbox WHERE state='done' ORDER BY rowid DESC LIMIT 4096)"
++            )
++        return bool(inserted)
++
++
++class MaxWebhook:
++    def __init__(self, transport, dispatcher, secret, path):
++        self.transport = transport
++        self.dispatcher = dispatcher
++        self.secret = secret
++        self.inbox = WebhookInbox(path)
++        self.wake = asyncio.Event()
++        self._control_lock = asyncio.Lock()
++
++    async def accept(self, raw):
++        await self.transport._refresh()
++        message = raw.get("message") or {}
++        text = (message.get("body") or {}).get("text") or ""
++        # Pairing codes and callback payloads never enter the durable inbox.
++        control = (
++            not text
++            or raw["update_type"] != "message_created"
++            or text.partition(" ")[0]
++            in {
++                "/start",
++                "/help",
++                "/agent",
++                "/new",
++                "/stop",
++                "/sessions",
++                "/web",
++                "/mobile",
++                "/approve",
++                "/deny",
++            }
++        )
++        if not control:
++            from kiro_crew.messaging.approval import parse_approval_reply, pending_for
++
++            uid = (message.get("sender") or {}).get("user_id")
++            control = bool(
++                self.transport.access.allowed(uid)
++                and parse_approval_reply(text)
++                and pending_for(self.dispatcher._key(str(uid)), str(uid))
++            )
++        if control:
++            async with self._control_lock:
++                key = self.inbox.key(raw)
++                # Consume before a verdict: a crash must never approve a later tool.
++                if not await asyncio.to_thread(self.inbox.complete_control, key):
++                    return
++                await self.transport.receive(raw)
++            return
++        user = message.get("sender") or {}
++        if (
++            not self.transport.access.allowed(user.get("user_id"))
++            or user.get("is_bot")
++            or (message.get("recipient") or {}).get("chat_type") != "dialog"
++        ):
++            return
++        from kiro_crew.security import redact_credentials
++
++        safe = json.loads(json.dumps(raw))
++        text, _ = redact_credentials(text)
++        for token in (self.transport.client._token, self.secret):
++            if token:
++                text = text.replace(token, "[REDACTED: credential]")
++        safe["message"]["body"]["text"] = text
++        await asyncio.to_thread(self.inbox.enqueue, safe)
++        self.wake.set()
++
++    async def run(self):
++        while True:
++            self.wake.clear()
++            entry = await asyncio.to_thread(self.inbox.next)
++            if entry is None:
++                await self.wake.wait()
++                continue
++            key, raw, state = entry
++            uid = str(raw["message"]["sender"]["user_id"])
++            if state == "running":
++                # Never replay a turn whose tools may already have run.
++                await self.transport._refresh()
++                if self.transport.may_send_to(uid):
++                    try:
++                        await self.transport.send_message(
++                            uid,
++                            "A previous MAX reply was interrupted. Check the dashboard before resending.",
++                        )
++                    except (RuntimeError, OSError):
++                        await asyncio.sleep(5)
++                        continue
++                await asyncio.to_thread(self.inbox.mark, key, "done")
++                continue
++            await asyncio.to_thread(self.inbox.mark, key, "running")
++            try:
++                await self.transport.receive(raw)
++                task = self.dispatcher._turns.get(uid)
++                if task:
++                    await asyncio.shield(task)
++            except asyncio.CancelledError:
++                current = asyncio.current_task()
++                if current is not None and current.cancelling():
++                    raise
++            except (
++                Exception
++            ):  # noqa: BLE001 -- leave an uncertain turn for a restart notice, never auto-replay tools
++                await asyncio.sleep(5)
++                continue
++            await asyncio.to_thread(self.inbox.mark, key, "done")
++
++
++def _valid(raw):
++    if not isinstance(raw, dict) or raw.get("update_type") not in {
++        "message_created",
++        "message_callback",
++        "bot_started",
++    }:
++        return False
++    if raw["update_type"] == "bot_started":
++        return isinstance(raw.get("user"), dict) and type(raw.get("chat_id")) is int
++    msg = raw.get("message")
++    if not isinstance(msg, dict):
++        return False
++    if not isinstance(msg.get("recipient"), dict) or (
++        msg.get("body") is not None and not isinstance(msg.get("body"), dict)
++    ):
++        return False
++    body = msg.get("body") or {}
++    if body.get("text") is not None and not isinstance(body.get("text"), str):
++        return False
++    if raw["update_type"] == "message_callback":
++        cb = raw.get("callback")
++        return (
++            isinstance(cb, dict)
++            and isinstance(cb.get("user"), dict)
++            and isinstance(cb.get("callback_id"), str)
++        )
++    return isinstance(msg.get("sender"), dict) and (
++        msg.get("body") is None or isinstance(body.get("mid"), str)
++    )
++
++
++async def api_max_webhook(request):
++    state = request.app.get("state")
++    transport = state.channel_transports.get("max") if state else None
++    service = getattr(transport, "webhook", None)
++    if service is None or not service.secret:
++        return web.Response(status=503)
++    worker = getattr(getattr(transport, "client", None), "_task", None)
++    if worker is not None and worker.done():
++        return web.Response(status=503)
++    supplied = request.headers.get("X-Max-Bot-Api-Secret", "")
++    if len(supplied) > 256 or not hmac.compare_digest(supplied.encode(), service.secret.encode()):
++        return web.Response(status=401)
++    from kiro_crew.dashboard.handlers._shared import read_bounded_json
++
++    raw, error = await read_bounded_json(request, max_bytes=MAX_BODY)
++    if error is not None:
++        return error
++    if not _valid(raw):
++        return web.Response(status=400)
++    try:
++        await asyncio.wait_for(service.accept(raw), timeout=20)
++    except (OSError, sqlite3.Error, OverflowError, TimeoutError, RuntimeError):
++        return web.Response(status=503)
++    return web.Response(status=200)
+--- a/src/kiro_crew/sandbox_leaves.py
++++ b/src/kiro_crew/sandbox_leaves.py
+@@ -148,6 +148,8 @@
+ 
+ #: Crew-home leaves with no legitimate in-sandbox reader — bind-masked in every mode.
+ _CREW_HIDDEN_LEAVES: tuple[str, ...] = (
++    # Gateway-only MAX inbox, retry fingerprints, cursor and future SQLite sidecars.
++    "max",
+     # Gateway diagnostics: recorded host and gateway state, plus loop-stall dumps.
+     # The gateway process writes these; an agent reads them through the owner-gated
+     # /api/debug routes and the kirocrew-debug MCP tools, which redact on the way
+--- a/src/kiro_crew/sandbox_precreate.py
++++ b/src/kiro_crew/sandbox_precreate.py
+@@ -521,6 +521,7 @@
+ #: existing empty root as usable, and proves the root writable before certifying
+ #: any clone, so materialising it early changes nothing it relies on.
+ _CREW_PRECREATE_HIDDEN_DIR_LEAVES: tuple[str, ...] = (
++    "max",  # The mask must exist before MAX starts or creates a journal.
+     "aws-control-staging",
+     # Browser Harness's runtime directory and Kiro's Chromium profile. Both are
+     # created on the FIRST connect (``browser_harness.supervisor``), so a sandbox
+--- a/src/kiro_crew/sandbox_seals.py
++++ b/src/kiro_crew/sandbox_seals.py
+@@ -197,7 +197,7 @@
+ #: So for these, a link is refused: the disposition must attach to the same name the
+ #: reader uses, and following a link is exactly the gap that voids it.
+ _CREW_NO_ALIAS_LEAVES: frozenset[str] = frozenset(
+-    {"crew-panels", "member-records", "panel-dismissals", "panel-templates", "released-sessions"}
++    {"max", "crew-panels", "member-records", "panel-dismissals", "panel-templates", "released-sessions"}
+ )
+ 
+ 
+--- a/src/kiro_crew/sandbox_tiers.py
++++ b/src/kiro_crew/sandbox_tiers.py
+@@ -1255,6 +1255,8 @@
+     "WECOM_BOT_ID",
+     "WECOM_SECRET",
+     "TELEGRAM_BOT_TOKEN",
++    "MAX_BOT_TOKEN",
++    "MAX_WEBHOOK_SECRET",
+     "DISCORD_BOT_TOKEN",
+     "WEBEX_BOT_TOKEN",
+     "MICROSOFT_APP_ID",
+--- a/src/kiro_crew/security/paths_lists.py
++++ b/src/kiro_crew/security/paths_lists.py
+@@ -162,6 +162,7 @@
+ _CREW_HOME_PREFIXES: tuple[str, ...] = (".kiro/crew", ".kirocrew")
+ 
+ _CREW_SECRET_LEAVES: list[str] = [
++    "max",  # Only the gateway may read or mutate channel admission/retry state.
+     "scratch/.trees.json",  # Reads expose other trees; writes remap resumes.
+     # Gateway diagnostics, for the reason the sandbox mask gives: the rows carry
+     # frame labels, folded stacks and process detail, and the owner-gated read
+--- a/src/kiro_crew/slack/gateway.py
++++ b/src/kiro_crew/slack/gateway.py
+@@ -1183,6 +1183,7 @@
+     run = _boot.run
+     # gateway_runtime/channel_boot.py
+     _hoist_wecom = _channel_boot._hoist_wecom
++    _hoist_max = _channel_boot._hoist_max
+     _hoist_telegram = _channel_boot._hoist_telegram
+     _hoist_weixin = _channel_boot._hoist_weixin
+     _hoist_whatsapp = _channel_boot._hoist_whatsapp
+--- a/src/kiro_crew/slack/gateway_runtime/channel_boot.py
++++ b/src/kiro_crew/slack/gateway_runtime/channel_boot.py
+@@ -68,6 +68,15 @@
+ # restart re-derives exactly what boot derived. A hoist resets the legacy
+ # ``_<channel>_client`` mirror too: it runs only before a start (boot or
+ # restart), where the mirror is None by construction.
++def _hoist_max(self: GatewayOrchestrator, cfg: KiroCrewConfig, creds: Mapping[str, str]) -> None:
++    self._max_token = creds.get("MAX_BOT_TOKEN", "")
++    self._max_webhook_secret = creds.get("MAX_WEBHOOK_SECRET", "")
++    self._max_enabled = bool(
++        cfg.max.enabled and self._max_token and cfg.max.delivery_mode in ("polling", "webhook")
++    )
++    self._max_client = None
++
++
+ def _hoist_wecom(self: GatewayOrchestrator, cfg: KiroCrewConfig, creds: Mapping[str, str]) -> None:
+     self._wecom_bot_id = creds.get(CRED_WECOM_BOT_ID, "")
+     self._wecom_secret = creds.get(CRED_WECOM_SECRET, "")
+--- a/src/kiro_crew/slack/gateway_runtime/orchestrator_init.py
++++ b/src/kiro_crew/slack/gateway_runtime/orchestrator_init.py
+@@ -106,6 +106,7 @@
+     # ``restart_channel`` can re-run exactly one of them against a fresh
+     # config when a connection parameter changes.
+     self._hoist_wecom(cfg, creds)
++    self._hoist_max(cfg, creds)
+     self._hoist_telegram(cfg, creds)
+     self._hoist_weixin(cfg, creds)
+     self._hoist_whatsapp(cfg, creds)

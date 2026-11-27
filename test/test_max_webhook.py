@@ -164,18 +164,18 @@ async def test_receiver_rejects_bad_shape_and_accepts_once(monkeypatch):
 
 def test_webhook_bypass_is_exact_and_post_only():
     from kiro_crew.dashboard.token_auth_paths import (
-        _exact_method_bypass,
+        _BYPASS_EXACT_METHODS,
         is_csrf_exempt,
     )
 
-    assert _exact_method_bypass("/api/messaging/max", "POST")
+    assert "POST" in _BYPASS_EXACT_METHODS.get("/api/messaging/max", frozenset())
     assert is_csrf_exempt("/api/messaging/max", "POST")
     for path, method in [
         ("/api/messaging/max", "GET"),
         ("/api/messaging/max/other", "POST"),
         ("/api/max/pairing", "POST"),
     ]:
-        assert not _exact_method_bypass(path, method)
+        assert method not in _BYPASS_EXACT_METHODS.get(path, frozenset())
         assert not is_csrf_exempt(path, method)
 
 

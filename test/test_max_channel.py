@@ -9,6 +9,26 @@ import pytest
 
 
 @pytest.mark.asyncio
+async def test_registered_max_defaults_to_no_receiver_and_filters_credential():
+    from kiro_crew.channels import builtin_channel_descriptors
+    from kiro_crew.config.loader import KiroCrewConfig
+    from kiro_crew.config.loader_credentials import (
+        CREDENTIAL_KEYS,
+        VAULT_CHANNEL_CREDENTIAL_KEYS,
+    )
+    from kiro_crew.sandbox_tiers import _AGENT_DENIED_ENV_KEYS
+
+    cfg = KiroCrewConfig()
+    assert not cfg.max.enabled
+    desc = next(d for d in builtin_channel_descriptors() if d.channel_type == "max")
+    assert desc.credentials == ("MAX_BOT_TOKEN",)
+    assert "MAX_BOT_TOKEN" in CREDENTIAL_KEYS
+    assert "MAX_BOT_TOKEN" in VAULT_CHANNEL_CREDENTIAL_KEYS
+    assert "MAX_BOT_TOKEN" in _AGENT_DENIED_ENV_KEYS
+    assert await desc.start(SimpleNamespace(_max_enabled=False)) is None
+
+
+@pytest.mark.asyncio
 async def test_pairing_never_trusts_first_sender_and_is_single_use():
     from kiro_crew.max.access import OwnerAccess
 
