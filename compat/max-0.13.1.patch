@@ -146,7 +146,7 @@
      "telegram",
 --- /dev/null
 +++ b/src/kiro_crew/dashboard/handlers/max_pairing.py
-@@ -0,0 +1,120 @@
+@@ -0,0 +1,137 @@
 +"""A signed-in dashboard owner issues an ephemeral MAX pairing code."""
 +
 +import asyncio
@@ -166,7 +166,7 @@
 +    if denied is not None:
 +        return denied
 +    if request.get("app") or not is_host_owner_dashboard_request(request):
-+        return web.json_response({"error": "owner_only"}, status=403)
++        return web.json_response({"error": "owner_only", "code": "owner_only"}, status=403)
 +    from kiro_crew.config.loader import KiroCrewConfig
 +    from kiro_crew.max.access import OwnerAccess
 +
@@ -196,7 +196,9 @@
 +        or not is_host_owner_dashboard_request(request)
 +        or not check_origin(request, require=True)
 +    ):
-+        return web.json_response({"error": "owner_origin_required"}, status=403)
++        return web.json_response(
++            {"error": "owner_origin_required", "code": "owner_origin_required"}, status=403
++        )
 +    from kiro_crew.config.loader import KiroCrewConfig
 +    from kiro_crew.max.webhook import subscription_url
 +
@@ -210,11 +212,16 @@
 +        or transport is None
 +        or service is None
 +    ):
-+        return web.json_response({"error": "max_webhook_not_ready"}, status=409)
++        return web.json_response(
++            {"error": "max_webhook_not_ready", "code": "max_webhook_not_ready"}, status=409
++        )
 +    try:
 +        url = subscription_url(cfg.dashboard.url)
 +    except ValueError:
-+        return web.json_response({"error": "external_https_443_required"}, status=409)
++        return web.json_response(
++            {"error": "external_https_443_required", "code": "external_https_443_required"},
++            status=409,
++        )
 +    try:
 +        result = await transport.client.request(
 +            "POST",
@@ -226,9 +233,13 @@
 +            },
 +        )
 +    except RuntimeError:
-+        return web.json_response({"error": "max_subscription_failed"}, status=502)
++        return web.json_response(
++            {"error": "max_subscription_failed", "code": "max_subscription_failed"}, status=502
++        )
 +    if result.get("success") is not True:
-+        return web.json_response({"error": "max_subscription_failed"}, status=502)
++        return web.json_response(
++            {"error": "max_subscription_failed", "code": "max_subscription_failed"}, status=502
++        )
 +    sel().log_api_access(
 +        caller=request.get("user", ""),
 +        operation="max.subscription.register",
@@ -247,16 +258,22 @@
 +        or not check_origin(request, require=True)
 +        or not is_host_owner_dashboard_request(request)
 +    ):
-+        return web.json_response({"error": "owner_origin_required"}, status=403)
++        return web.json_response(
++            {"error": "owner_origin_required", "code": "owner_origin_required"}, status=403
++        )
 +    state = request.app.get("state")
 +    transport = state.channel_transports.get("max") if state else None
 +    if transport is None:
-+        return web.json_response({"error": "max_not_started"}, status=409)
++        return web.json_response(
++            {"error": "max_not_started", "code": "max_not_started"}, status=409
++        )
 +    await transport._refresh()
 +    try:
 +        code = transport.access.issue()
 +    except ValueError:
-+        return web.json_response({"error": "owner_already_configured"}, status=409)
++        return web.json_response(
++            {"error": "owner_already_configured", "code": "owner_already_configured"}, status=409
++        )
 +    sel().log_api_access(
 +        caller=request.get("user", ""),
 +        operation="max.pairing.issue",
@@ -1117,7 +1134,7 @@
 +from aiohttp import web
 +
 +from kiro_crew.dashboard.token_auth_paths import MAX_WEBHOOK_PATH
-+from kiro_crew.platform_compat import open_create_no_reparse, open_file_no_reparse
++from kiro_crew.platform_compat import local_user_id, open_create_no_reparse, open_file_no_reparse
 +
 +MAX_BODY = 65536
 +
@@ -1154,7 +1171,7 @@
 +        if path.parent.is_symlink():
 +            raise PermissionError("MAX inbox directory must not be a link")
 +        parent = path.parent.stat()
-+        if os.name == "posix" and (parent.st_uid != os.getuid() or parent.st_mode & 0o022):
++        if os.name == "posix" and (parent.st_uid != local_user_id() or parent.st_mode & 0o022):
 +            raise PermissionError("MAX inbox directory must be owner-controlled")
 +        fd = open_create_no_reparse(path)
 +        try:
@@ -1193,7 +1210,7 @@
 +        info = os.fstat(fd)
 +        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
 +            raise PermissionError("MAX inbox must be a regular file with one link")
-+        if os.name == "posix" and (info.st_uid != os.getuid() or info.st_mode & 0o077):
++        if os.name == "posix" and (info.st_uid != local_user_id() or info.st_mode & 0o077):
 +            raise PermissionError("MAX inbox requires owner-only permissions")
 +        return info.st_dev, info.st_ino
 +

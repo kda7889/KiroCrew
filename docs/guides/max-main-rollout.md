@@ -11,7 +11,7 @@ The implementation for review is
 SHA256 values in
 [`compat/max-0.13.1-base.json`](../../compat/max-0.13.1-base.json).
 It targets the public Python sources of the installed 0.13.1 distribution:
-28 files, 1284 added lines and one removed line. Existing files receive only
+28 files, 1301 added lines and one removed line. Existing files receive only
 MAX registration, config, credential filtering, routes and sandbox state fences.
 New files hold the existing MAX adapter, owner pairing and scoped CA.
 No 0.14 migration, dependency, installer, runtime-selection or workspace change
@@ -33,15 +33,19 @@ host-owner predicate; the patch imports that function instead of the newer
 `is_host_owner_dashboard_request` name. Its sandbox no-alias set uses a different
 layout; the patch adds MAX without adding unrelated newer leaves. The webhook
 test now checks the method map used by both versions rather than a 0.14-only
-helper name.
+helper name. Management errors include their stable `code` field. Inbox ownership
+reads use `platform_compat.local_user_id`, retaining the POSIX UID check.
 
 ### Proof and remaining boundary
 
-An unmodified 0.13.1 source copy fails the pairing test with
-`ModuleNotFoundError: kiro_crew.max`. The patch applies with `git apply --check`
-and without fuzz to fresh copies of all 28 exact public source files. The
-result matches the tested source copy byte-for-byte. On that isolated code,
-57 MAX channel, webhook and TLS tests pass. The BPMN/SVG repository-path test
+The producer's unmodified 0.13.1 source copy failed the pairing test with
+`ModuleNotFoundError: kiro_crew.max`. That original patch applied with
+`git apply --check` and without fuzz to fresh copies of all 28 exact public
+source files; the result matched its tested source copy byte-for-byte.
+The producer's original patch passed 57 MAX channel, webhook and TLS tests.
+The current patch includes the error-code and UID-seam source corrections;
+its refreshed old-base test and packaging proof remain pending.
+The BPMN/SVG repository-path test
 is excluded from this version-specific run. No real bot, secret, receiver,
 native sandbox, service stop or live installation was exercised.
 
