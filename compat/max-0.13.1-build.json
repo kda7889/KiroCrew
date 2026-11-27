@@ -1,0 +1,31 @@
+{
+  "status": "unfinished: official base SHA mismatch; end-to-end build failed; stopped by owner",
+  "base_git_sha": "e9178c0de9e6e9ba30ac75d2bbf1c4f34788bb59",
+  "base_wheel_sha256": "916f49de2a8cd261d0ae79edc8f9ad125069f159da70659a8ee95b241b804f80",
+  "base_wheel_url": "https://github.com/kirodotdev/KiroCrew/releases/download/v0.13.1/kirocrew-0.13.1-py3-none-any.whl",
+  "version": "0.13.1+max.2",
+  "patch_sha256": "2973741e11b5a8524af54ac1b5eb974776466dd5b5a70f37fdcd068de4867ebb",
+  "ca_path": "kiro_crew/max/russian_trusted_root_ca.pem",
+  "ca_sha256": "aa800ef345422d6158c6fafe1c06c429dbda21c3df4bb1ccb45a920ec1111399",
+  "requires_dist_sha256": "50715e5e91c88716bc17eecebbcbe8417b6734fad50031ebcce27c91bb77382e",
+  "build_files": {
+    "pyproject.toml": "0f3b809a017dc43832a0b963ea399fc8862cfe25081e478a5affbaba7e562905",
+    "setup.py": "d847e7ed82fe328bf8a6f5357a4bd3a92dc96f9ef5fba70c8479904a3c333250",
+    "README.md": "35eeabf1957752ab3595eb703c0c88a5d7a61359b509cbc0b91a56eceedc270a",
+    "setup.cfg": "eb7af6720ff2db6aeaf7b760af38ed51b7a602000d51d11365f660efc470f2ef"
+  },
+  "package_data": [
+    "max/russian_trusted_root_ca.pem",
+    "apps/builtins/auto_improvement/docs/MANUAL.md",
+    "apps/builtins/auto_improvement/docs/PORT_PLAN.md",
+    "data/tips_curated.json",
+    "tests_fixtures/skills-custom/skills/auto/.pending/flaky-triage/.meta.json",
+    "tests_fixtures/skills-custom/skills/auto/.pending/flaky-triage/SKILL.md"
+  ],
+  "build_constraints": [
+    "setuptools==84.2.1",
+    "wheel==0.48.0",
+    "packaging==26.4"
+  ],
+  "source_date_epoch": 315532800
+}

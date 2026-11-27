@@ -2,6 +2,64 @@
 
 ## Current route: review the channel patch, not the installer
 
+### Repeatable build-only recipe
+
+**Stopped by owner; unfinished.** The official base wheel failed the base-file
+SHA check. The end-to-end build did not pass. The recipe below is preserved
+for review, not a working release. No baseline overlay was added.
+
+[`scripts/max_backport_build.py`](../../scripts/max_backport_build.py) accepts
+the original public 0.13.1 wheel and a **new directory outside this checkout**.
+It never installs a package, changes a service or reads a Crew data home.
+Python 3.12+, `git` and `uv` must already be available in the caller's PATH.
+
+[`compat/max-0.13.1-build.json`](../../compat/max-0.13.1-build.json) pins the
+official base wheel, upstream source commit, four original build files, MAX
+patch, public CA and build-tool constraints. The wheel's SHA256 is also published
+on the [official 0.13.1 release](https://github.com/kirodotdev/KiroCrew/releases/tag/v0.13.1).
+The recipe verifies the base wheel and its RECORD before extracting public
+package files. It retrieves only the pinned upstream build files, preserves
+the original frontend, licenses and entrypoint, then uses the existing
+setuptools `BuildWithFrontend` path. Explicit package_data entries retain five
+baseline data/doc/fixture files that otherwise disappear when reconstructing
+source from a wheel, alongside the added public MAX CA.
+
+For example, from this checkout, with caller-owned temporary paths:
+
+```sh
+: "${KIROCREW_SCRATCH:?Set KIROCREW_SCRATCH to your temporary build directory}"
+curl --fail --location --output "$KIROCREW_SCRATCH/max-base-0.13.1.whl" \
+  https://github.com/kirodotdev/KiroCrew/releases/download/v0.13.1/kirocrew-0.13.1-py3-none-any.whl
+python3 scripts/max_backport_build.py \
+  "$KIROCREW_SCRATCH/max-base-0.13.1.whl" "$KIROCREW_SCRATCH/max-build-review"
+```
+
+The output directory must not exist. The result contains a local-version
+wheel, `build.log` and `build-result.json`. The JSON binds the wheel hash to
+the pinned inputs and records the unchanged Requires-Dist and zero missing
+baseline package files. Wheel RECORD hashes, CA bytes, extras, Python floor,
+entrypoint and unrelated file bytes are checked before success is reported.
+Neither a wheel nor temporary output belongs in git. The recipe and input
+manifest are the durable deliverable; another session cannot rely on this
+worker's scratch path. Fixed build constraints and SOURCE_DATE_EPOCH remove
+the moving build-tool and ZIP timestamp inputs.
+In an ordinary terminal without KIROCREW_SCRATCH, supply your own absolute
+input/output paths instead. Do not use the worker's session-owned directory.
+
+**Dependency ruling:** all original 0.13.1 Requires-Dist rows remain unchanged,
+including `cryptography>=42,<48`. The existing machine's cryptography50.0.2
+does not satisfy that original constraint; its pyOpenSSL26.4.0 requires
+cryptography>=49,<51. That is an existing environment mismatch, not permission
+to relax the MAX package's contract or replace either library. The earlier
+scratch candidate that widened the bound to `<51` is rejected. This recipe
+does not claim installation compatibility with that existing environment.
+
+The minimal pairing surface is still the owner-authenticated
+`POST /api/max/pairing` plus `GET /api/max/config`; no new UI framework is
+needed for an owner API client. The API's host-owner and Origin gates remain
+required. A real `/start <code>` and `/help` are later live checks, not build
+acceptance. No installation, token or lifecycle command is part of this recipe.
+
 The owner stopped development of the full upgrade/backup helper. Preserve it
 as historical work; do not run it for this route. The 28GiB reservation came
 from our excessive whole-Crew rollback design, not from MAX.
@@ -15,7 +73,8 @@ It targets the public Python sources of the installed 0.13.1 distribution:
 MAX registration, config, credential filtering, routes and sandbox state fences.
 New files hold the existing MAX adapter, owner pairing and scoped CA.
 No 0.14 migration, dependency, installer, runtime-selection or workspace change
-is part of this patch. This is a source patch, not an installable release.
+is part of this patch. A recipe-built wheel is an unsigned local candidate,
+not an approved installable release.
 
 ### Why this route
 
@@ -44,7 +103,8 @@ The producer's unmodified 0.13.1 source copy failed the pairing test with
 source files; the result matched its tested source copy byte-for-byte.
 The producer's original patch passed 57 MAX channel, webhook and TLS tests.
 The current patch includes the error-code and UID-seam source corrections;
-its refreshed old-base test and packaging proof remain pending.
+its refreshed old-base run passed 59 focused tests. The independent recipe
+checks packaging and metadata; it does not repeat those unchanged tests.
 The BPMN/SVG repository-path test
 is excluded from this version-specific run. No real bot, secret, receiver,
 native sandbox, service stop or live installation was exercised.
@@ -59,7 +119,8 @@ exact files, not every build input of an upstream 0.13.1 source checkout.
 When packaging, explicitly include `max/russian_trusted_root_ca.pem` under
 `[options.package_data] kiro_crew`, retain 0.13.1 dependency metadata and verify
 the resulting wheel contents. The patch's source-copy proof does not prove that
-packaging step; no backport wheel has been built or installed.
+packaging step. A local candidate has been built in temporary scratch, but
+no backport wheel has been installed or accepted for live use.
 
 The 0.13.1 frontend stays unchanged. The backport supplies owner-authenticated
 `GET /api/max/config`, `POST /api/max/pairing` and

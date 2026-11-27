@@ -56,6 +56,7 @@ print(json.dumps({'read': read(sentinel), 'overwrite': write(sentinel),
             cwd=tmp_path,
             capture_output=True,
             text=True,
+            encoding="utf-8",
             timeout=default_timeout(),
         )
         assert result.returncode == 0, result.stderr
