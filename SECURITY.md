@@ -1,3 +1,13 @@
+## Security reports for the MAX integration fork
+
+Please report MAX integration vulnerabilities privately through
+[GitHub private vulnerability reporting](https://github.com/kda7889/KiroCrew/security/advisories/new).
+Do not post tokens, pairing codes, vault contents or private transcripts in public
+issues. Include the affected fork commit/version, a minimal synthetic reproducer
+and expected versus observed authorization behavior. We do not promise a fixed
+response time or a bug bounty. For upstream Crew/AWS issues, use the upstream
+policy below.
+
 ## Reporting Security Issues
 
 Amazon Web Services (AWS) practices industry-standard Coodinated Vulnerability Disclosure (CVD) with the goal of reducing adversary advantage while a security vulnerability is being addressed. The [CERT® Guide to Coordinated Vulnerability Disclosure](https://certcc.github.io/CERT-Guide-to-CVD/tutorials/cvd_in_a_nutshell/) provides information about the CVD process, and outlines tools and practices that can help achieve this goal.

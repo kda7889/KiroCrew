@@ -1,50 +1,491 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="MaxDefinitions" targetNamespace="https://kirocrew.dev/process/max">
   <bpmn:process id="MaxOwnerPairing" name="MAX owner pairing" isExecutable="false">
-    <bpmn:documentation>Descriptive source implementation. In webhook mode, prerequisite: the host owner registers the configured HTTPS subscription using Settings / Channels / MAX / Register webhook. Registration success does not prove delivery. Then the host owner issues a code using Pair owner through authenticated same-origin dashboard POST. TTL 300 seconds, five attempts, single use. First sender is never trusted. Atomic persistence precedes access. Webhook controls consume their retry fingerprint before execution; after interruption send a new command rather than replay an old approval. No live MAX demonstration or deployment is claimed. Work item it_fd9542a7; technical source work, no Plane card required. Operator procedure: ../guides/max-candidate.md.</bpmn:documentation>
+    <bpmn:documentation>Descriptive source implementation. In webhook mode, prerequisite: the host owner registers the configured HTTPS subscription using Settings / Channels / MAX / Register webhook. Registration success does not prove delivery. Then the host owner issues a code using Pair owner through authenticated same-origin dashboard POST. TTL 300 seconds, five attempts, single use. First sender is never trusted. Atomic persistence precedes access. Webhook controls consume their retry fingerprint before execution; after interruption send a new command rather than replay an old approval. Pairing and text reply were confirmed on testserver; max.4 navigation and tool permission were accepted by the owner. This is descriptive Python behavior, not a Camunda deployment. Work item it_fd9542a7; technical source work, no Plane card required. Operator procedure: ../guides/max-main-rollout.md. In the 0.13.1 backport use the authenticated owner API; its frontend has no MAX Settings button.</bpmn:documentation>
     <bpmn:laneSet id="Roles">
-      <bpmn:lane id="OwnerLane" name="Host owner"><bpmn:flowNodeRef>Start</bpmn:flowNodeRef><bpmn:flowNodeRef>Request</bpmn:flowNodeRef><bpmn:flowNodeRef>Present</bpmn:flowNodeRef></bpmn:lane>
-      <bpmn:lane id="GatewayLane" name="Gateway"><bpmn:flowNodeRef>Host</bpmn:flowNodeRef><bpmn:flowNodeRef>Issue</bpmn:flowNodeRef><bpmn:flowNodeRef>Valid</bpmn:flowNodeRef><bpmn:flowNodeRef>Persist</bpmn:flowNodeRef><bpmn:flowNodeRef>Paired</bpmn:flowNodeRef><bpmn:flowNodeRef>Denied</bpmn:flowNodeRef></bpmn:lane>
+      <bpmn:lane id="OwnerLane" name="Host owner">
+        <bpmn:flowNodeRef>Start</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Request</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Present</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="GatewayLane" name="Gateway">
+        <bpmn:flowNodeRef>Host</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Issue</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Valid</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Persist</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Paired</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Denied</bpmn:flowNodeRef>
+      </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="Start" name="Pair request"/>
-    <bpmn:userTask id="Request" name="Owner: pair button"/>
-    <bpmn:exclusiveGateway id="Host" name="Host owner?"/>
-    <bpmn:serviceTask id="Issue" name="Gateway: issue code"/>
-    <bpmn:userTask id="Present" name="Owner: private /start"/>
-    <bpmn:exclusiveGateway id="Valid" name="Valid code?"/>
-    <bpmn:serviceTask id="Persist" name="Gateway: save numeric ID"/>
-    <bpmn:endEvent id="Paired" name="Paired"/>
-    <bpmn:endEvent id="Denied" name="Denied"/>
-    <bpmn:sequenceFlow id="F1" sourceRef="Start" targetRef="Request" name=""/>
-    <bpmn:sequenceFlow id="F2" sourceRef="Request" targetRef="Host" name=""/>
-    <bpmn:sequenceFlow id="F3" sourceRef="Host" targetRef="Issue" name="yes"/>
-    <bpmn:sequenceFlow id="F4" sourceRef="Host" targetRef="Denied" name="no"/>
-    <bpmn:sequenceFlow id="F5" sourceRef="Issue" targetRef="Present" name=""/>
-    <bpmn:sequenceFlow id="F6" sourceRef="Present" targetRef="Valid" name=""/>
-    <bpmn:sequenceFlow id="F7" sourceRef="Valid" targetRef="Persist" name="yes"/>
-    <bpmn:sequenceFlow id="F8" sourceRef="Valid" targetRef="Denied" name="expired / wrong / used"/>
-    <bpmn:sequenceFlow id="F9" sourceRef="Persist" targetRef="Paired" name=""/>
+    <bpmn:startEvent id="Start" name="Pair request" />
+    <bpmn:userTask id="Request" name="Owner: request pair code" />
+    <bpmn:exclusiveGateway id="Host" name="Host owner?" />
+    <bpmn:serviceTask id="Issue" name="Gateway: issue code" />
+    <bpmn:userTask id="Present" name="Owner: private /start" />
+    <bpmn:exclusiveGateway id="Valid" name="Valid code?" />
+    <bpmn:serviceTask id="Persist" name="Gateway: save numeric ID" />
+    <bpmn:endEvent id="Paired" name="Paired" />
+    <bpmn:endEvent id="Denied" name="Denied" />
+    <bpmn:sequenceFlow id="F1" sourceRef="Start" targetRef="Request" name="" />
+    <bpmn:sequenceFlow id="F2" sourceRef="Request" targetRef="Host" name="" />
+    <bpmn:sequenceFlow id="F3" sourceRef="Host" targetRef="Issue" name="yes" />
+    <bpmn:sequenceFlow id="F4" sourceRef="Host" targetRef="Denied" name="no" />
+    <bpmn:sequenceFlow id="F5" sourceRef="Issue" targetRef="Present" name="" />
+    <bpmn:sequenceFlow id="F6" sourceRef="Present" targetRef="Valid" name="" />
+    <bpmn:sequenceFlow id="F7" sourceRef="Valid" targetRef="Persist" name="yes" />
+    <bpmn:sequenceFlow id="F8" sourceRef="Valid" targetRef="Denied" name="expired / wrong / used" />
+    <bpmn:sequenceFlow id="F9" sourceRef="Persist" targetRef="Paired" name="" />
   </bpmn:process>
-  <bpmndi:BPMNDiagram id="MaxDiagram"><bpmndi:BPMNPlane id="MaxPlane" bpmnElement="MaxOwnerPairing">
-    <bpmndi:BPMNShape id="DI_OwnerLane" bpmnElement="OwnerLane" isHorizontal="true"><dc:Bounds x="20" y="25" width="1230" height="130"/></bpmndi:BPMNShape>
-    <bpmndi:BPMNShape id="DI_GatewayLane" bpmnElement="GatewayLane" isHorizontal="true"><dc:Bounds x="20" y="155" width="1230" height="265"/></bpmndi:BPMNShape>
-    <bpmndi:BPMNShape id="DI_Start" bpmnElement="Start"><dc:Bounds x="55" y="75" width="36" height="36"/></bpmndi:BPMNShape>
-    <bpmndi:BPMNShape id="DI_Request" bpmnElement="Request"><dc:Bounds x="130" y="55" width="165" height="76"/></bpmndi:BPMNShape>
-    <bpmndi:BPMNShape id="DI_Host" bpmnElement="Host"><dc:Bounds x="335" y="210" width="50" height="50"/></bpmndi:BPMNShape>
-    <bpmndi:BPMNShape id="DI_Issue" bpmnElement="Issue"><dc:Bounds x="430" y="197" width="165" height="76"/></bpmndi:BPMNShape>
-    <bpmndi:BPMNShape id="DI_Present" bpmnElement="Present"><dc:Bounds x="635" y="55" width="165" height="76"/></bpmndi:BPMNShape>
-    <bpmndi:BPMNShape id="DI_Valid" bpmnElement="Valid"><dc:Bounds x="840" y="210" width="50" height="50"/></bpmndi:BPMNShape>
-    <bpmndi:BPMNShape id="DI_Persist" bpmnElement="Persist"><dc:Bounds x="930" y="197" width="175" height="76"/></bpmndi:BPMNShape>
-    <bpmndi:BPMNShape id="DI_Paired" bpmnElement="Paired"><dc:Bounds x="1160" y="217" width="36" height="36"/></bpmndi:BPMNShape>
-    <bpmndi:BPMNShape id="DI_Denied" bpmnElement="Denied"><dc:Bounds x="700" y="355" width="36" height="36"/></bpmndi:BPMNShape>
-    <bpmndi:BPMNEdge id="DI_F1" bpmnElement="F1"><di:waypoint x="91" y="93"/><di:waypoint x="130" y="93"/></bpmndi:BPMNEdge>
-    <bpmndi:BPMNEdge id="DI_F2" bpmnElement="F2"><di:waypoint x="295" y="93"/><di:waypoint x="360" y="93"/><di:waypoint x="360" y="210"/></bpmndi:BPMNEdge>
-    <bpmndi:BPMNEdge id="DI_F3" bpmnElement="F3"><di:waypoint x="385" y="235"/><di:waypoint x="430" y="235"/></bpmndi:BPMNEdge>
-    <bpmndi:BPMNEdge id="DI_F4" bpmnElement="F4"><di:waypoint x="360" y="260"/><di:waypoint x="360" y="373"/><di:waypoint x="700" y="373"/></bpmndi:BPMNEdge>
-    <bpmndi:BPMNEdge id="DI_F5" bpmnElement="F5"><di:waypoint x="595" y="235"/><di:waypoint x="615" y="235"/><di:waypoint x="615" y="93"/><di:waypoint x="635" y="93"/></bpmndi:BPMNEdge>
-    <bpmndi:BPMNEdge id="DI_F6" bpmnElement="F6"><di:waypoint x="800" y="93"/><di:waypoint x="865" y="93"/><di:waypoint x="865" y="210"/></bpmndi:BPMNEdge>
-    <bpmndi:BPMNEdge id="DI_F7" bpmnElement="F7"><di:waypoint x="890" y="235"/><di:waypoint x="930" y="235"/></bpmndi:BPMNEdge>
-    <bpmndi:BPMNEdge id="DI_F8" bpmnElement="F8"><di:waypoint x="865" y="260"/><di:waypoint x="865" y="373"/><di:waypoint x="736" y="373"/></bpmndi:BPMNEdge>
-    <bpmndi:BPMNEdge id="DI_F9" bpmnElement="F9"><di:waypoint x="1105" y="235"/><di:waypoint x="1160" y="235"/></bpmndi:BPMNEdge>
-  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+  <bpmndi:BPMNDiagram id="MaxDiagram">
+    <bpmndi:BPMNPlane id="MaxPlane" bpmnElement="MaxOwnerPairing">
+      <bpmndi:BPMNShape id="DI_OwnerLane" bpmnElement="OwnerLane" isHorizontal="true">
+        <dc:Bounds x="20" y="25" width="1230" height="130" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="DI_GatewayLane" bpmnElement="GatewayLane" isHorizontal="true">
+        <dc:Bounds x="20" y="155" width="1230" height="265" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="DI_Start" bpmnElement="Start">
+        <dc:Bounds x="55" y="75" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="DI_Request" bpmnElement="Request">
+        <dc:Bounds x="130" y="55" width="165" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="DI_Host" bpmnElement="Host">
+        <dc:Bounds x="335" y="210" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="DI_Issue" bpmnElement="Issue">
+        <dc:Bounds x="430" y="197" width="165" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="DI_Present" bpmnElement="Present">
+        <dc:Bounds x="635" y="55" width="165" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="DI_Valid" bpmnElement="Valid">
+        <dc:Bounds x="840" y="210" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="DI_Persist" bpmnElement="Persist">
+        <dc:Bounds x="930" y="197" width="175" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="DI_Paired" bpmnElement="Paired">
+        <dc:Bounds x="1160" y="217" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="DI_Denied" bpmnElement="Denied">
+        <dc:Bounds x="700" y="355" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="DI_F1" bpmnElement="F1">
+        <di:waypoint x="91" y="93" />
+        <di:waypoint x="130" y="93" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DI_F2" bpmnElement="F2">
+        <di:waypoint x="295" y="93" />
+        <di:waypoint x="360" y="93" />
+        <di:waypoint x="360" y="210" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DI_F3" bpmnElement="F3">
+        <di:waypoint x="385" y="235" />
+        <di:waypoint x="430" y="235" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DI_F4" bpmnElement="F4">
+        <di:waypoint x="360" y="260" />
+        <di:waypoint x="360" y="373" />
+        <di:waypoint x="700" y="373" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DI_F5" bpmnElement="F5">
+        <di:waypoint x="595" y="235" />
+        <di:waypoint x="615" y="235" />
+        <di:waypoint x="615" y="93" />
+        <di:waypoint x="635" y="93" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DI_F6" bpmnElement="F6">
+        <di:waypoint x="800" y="93" />
+        <di:waypoint x="865" y="93" />
+        <di:waypoint x="865" y="210" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DI_F7" bpmnElement="F7">
+        <di:waypoint x="890" y="235" />
+        <di:waypoint x="930" y="235" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DI_F8" bpmnElement="F8">
+        <di:waypoint x="865" y="260" />
+        <di:waypoint x="865" y="373" />
+        <di:waypoint x="736" y="373" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds width="180" height="30" x="805" y="300" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DI_F9" bpmnElement="F9">
+        <di:waypoint x="1105" y="235" />
+        <di:waypoint x="1160" y="235" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+  <bpmn:process id="MaxConversation" name="MAX conversations and tool permission" isExecutable="false">
+    <bpmn:documentation>Descriptive max.4 behavior. Owner-only private messages. Session/Bot pickers reuse Telegram common controller, scoped owner/message/nonce, atomic binding and rollback. Refuse stale selections; no implicit fallback to another conversation. Stop uses the original running key before reading persisted binding. Trust applies only to the current session under native policy; timeout denies after 300 seconds. No Camunda execution is claimed.</bpmn:documentation>
+    <bpmn:startEvent id="ChatStart" name="Receive private update">
+      <bpmn:outgoing>C01</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:exclusiveGateway id="CheckOwner" name="Paired owner?">
+      <bpmn:outgoing>C03</bpmn:outgoing>
+      <bpmn:outgoing>C02</bpmn:outgoing>
+      <bpmn:incoming>C01</bpmn:incoming>
+    </bpmn:exclusiveGateway>
+    <bpmn:endEvent id="ChatDenied" name="Refuse">
+      <bpmn:incoming>C02</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:exclusiveGateway id="CommandKind" name="Command?">
+      <bpmn:outgoing>C14</bpmn:outgoing>
+      <bpmn:outgoing>C12</bpmn:outgoing>
+      <bpmn:outgoing>C10</bpmn:outgoing>
+      <bpmn:outgoing>C08</bpmn:outgoing>
+      <bpmn:outgoing>C04</bpmn:outgoing>
+      <bpmn:incoming>C03</bpmn:incoming>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="ListChats" name="List /sessions or /bots">
+      <bpmn:outgoing>C05</bpmn:outgoing>
+      <bpmn:incoming>C04</bpmn:incoming>
+    </bpmn:serviceTask>
+    <bpmn:userTask id="ChooseChat" name="Choose scoped button">
+      <bpmn:outgoing>C06</bpmn:outgoing>
+      <bpmn:incoming>C05</bpmn:incoming>
+    </bpmn:userTask>
+    <bpmn:serviceTask id="BindChat" name="Bind or report stale / error">
+      <bpmn:outgoing>C07</bpmn:outgoing>
+      <bpmn:incoming>C06</bpmn:incoming>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="ReleaseChat" name="Detach /new or /unlink">
+      <bpmn:outgoing>C09</bpmn:outgoing>
+      <bpmn:incoming>C08</bpmn:incoming>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="StopChat" name="Cancel original /stop key">
+      <bpmn:outgoing>C11</bpmn:outgoing>
+      <bpmn:incoming>C10</bpmn:incoming>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="InfoChat" name="Show /help /agents /status">
+      <bpmn:outgoing>C13</bpmn:outgoing>
+      <bpmn:incoming>C12</bpmn:incoming>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="ChatReady" name="Ready for next message">
+      <bpmn:incoming>C13</bpmn:incoming>
+      <bpmn:incoming>C11</bpmn:incoming>
+      <bpmn:incoming>C09</bpmn:incoming>
+      <bpmn:incoming>C07</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:serviceTask id="ResolveChat" name="Resolve bound context">
+      <bpmn:outgoing>C26</bpmn:outgoing>
+      <bpmn:outgoing>C15</bpmn:outgoing>
+      <bpmn:incoming>C14</bpmn:incoming>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="RunChat" name="Run model / native policy">
+      <bpmn:outgoing>C16</bpmn:outgoing>
+      <bpmn:incoming>C15</bpmn:incoming>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="NeedPermission" name="Permission needed?">
+      <bpmn:outgoing>C19</bpmn:outgoing>
+      <bpmn:outgoing>C17</bpmn:outgoing>
+      <bpmn:incoming>C16</bpmn:incoming>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="SendReply" name="Send result">
+      <bpmn:incoming>C26</bpmn:incoming>
+      <bpmn:incoming>C25</bpmn:incoming>
+      <bpmn:incoming>C22</bpmn:incoming>
+      <bpmn:outgoing>C18</bpmn:outgoing>
+      <bpmn:incoming>C17</bpmn:incoming>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="ChatDone" name="Delivered">
+      <bpmn:incoming>C18</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:userTask id="WaitPermission" name="Owner replies 1 / 2 / 3">
+      <bpmn:outgoing>C20</bpmn:outgoing>
+      <bpmn:incoming>C19</bpmn:incoming>
+    </bpmn:userTask>
+    <bpmn:boundaryEvent id="ApprovalTimeout" name="300 sec" attachedToRef="WaitPermission" cancelActivity="true">
+      <bpmn:outgoing>C24</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="ApprovalTimer">
+        <bpmn:timeDuration>PT300S</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+    <bpmn:exclusiveGateway id="DecisionKind" name="Owner decision?">
+      <bpmn:outgoing>C23</bpmn:outgoing>
+      <bpmn:outgoing>C21</bpmn:outgoing>
+      <bpmn:incoming>C20</bpmn:incoming>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="AllowTool" name="Allow once / trust session">
+      <bpmn:outgoing>C22</bpmn:outgoing>
+      <bpmn:incoming>C21</bpmn:incoming>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="DenyTool" name="Deny tool">
+      <bpmn:outgoing>C25</bpmn:outgoing>
+      <bpmn:incoming>C24</bpmn:incoming>
+      <bpmn:incoming>C23</bpmn:incoming>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="C01" sourceRef="ChatStart" targetRef="CheckOwner" name="" />
+    <bpmn:sequenceFlow id="C02" sourceRef="CheckOwner" targetRef="ChatDenied" name="no" />
+    <bpmn:sequenceFlow id="C03" sourceRef="CheckOwner" targetRef="CommandKind" name="yes" />
+    <bpmn:sequenceFlow id="C04" sourceRef="CommandKind" targetRef="ListChats" name="sessions / bots" />
+    <bpmn:sequenceFlow id="C05" sourceRef="ListChats" targetRef="ChooseChat" name="" />
+    <bpmn:sequenceFlow id="C06" sourceRef="ChooseChat" targetRef="BindChat" name="" />
+    <bpmn:sequenceFlow id="C07" sourceRef="BindChat" targetRef="ChatReady" name="" />
+    <bpmn:sequenceFlow id="C08" sourceRef="CommandKind" targetRef="ReleaseChat" name="new / unlink" />
+    <bpmn:sequenceFlow id="C09" sourceRef="ReleaseChat" targetRef="ChatReady" name="" />
+    <bpmn:sequenceFlow id="C10" sourceRef="CommandKind" targetRef="StopChat" name="stop" />
+    <bpmn:sequenceFlow id="C11" sourceRef="StopChat" targetRef="ChatReady" name="" />
+    <bpmn:sequenceFlow id="C12" sourceRef="CommandKind" targetRef="InfoChat" name="help / agents / status" />
+    <bpmn:sequenceFlow id="C13" sourceRef="InfoChat" targetRef="ChatReady" name="" />
+    <bpmn:sequenceFlow id="C14" sourceRef="CommandKind" targetRef="ResolveChat" name="text" />
+    <bpmn:sequenceFlow id="C15" sourceRef="ResolveChat" targetRef="RunChat" name="valid binding" />
+    <bpmn:sequenceFlow id="C16" sourceRef="RunChat" targetRef="NeedPermission" name="" />
+    <bpmn:sequenceFlow id="C17" sourceRef="NeedPermission" targetRef="SendReply" name="no" />
+    <bpmn:sequenceFlow id="C18" sourceRef="SendReply" targetRef="ChatDone" name="" />
+    <bpmn:sequenceFlow id="C19" sourceRef="NeedPermission" targetRef="WaitPermission" name="yes" />
+    <bpmn:sequenceFlow id="C20" sourceRef="WaitPermission" targetRef="DecisionKind" name="" />
+    <bpmn:sequenceFlow id="C21" sourceRef="DecisionKind" targetRef="AllowTool" name="1 / 3" />
+    <bpmn:sequenceFlow id="C22" sourceRef="AllowTool" targetRef="SendReply" name="native tool result" />
+    <bpmn:sequenceFlow id="C23" sourceRef="DecisionKind" targetRef="DenyTool" name="2 / deny" />
+    <bpmn:sequenceFlow id="C24" sourceRef="ApprovalTimeout" targetRef="DenyTool" name="timeout" />
+    <bpmn:sequenceFlow id="C25" sourceRef="DenyTool" targetRef="SendReply" name="refusal" />
+    <bpmn:sequenceFlow id="C26" sourceRef="ResolveChat" targetRef="SendReply" name="binding refusal" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="MaxConversationDiagram">
+    <bpmndi:BPMNPlane id="MaxConversationPlane" bpmnElement="MaxConversation">
+      <bpmndi:BPMNShape id="DI_ChatStart" bpmnElement="ChatStart">
+        <dc:Bounds x="60" y="100" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="DI_CheckOwner" bpmnElement="CheckOwner">
+        <dc:Bounds x="170" y="93" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="DI_ChatDenied" bpmnElement="ChatDenied">
+        <dc:Bounds x="180" y="250" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="DI_CommandKind" bpmnElement="CommandKind">
+        <dc:Bounds x="320" y="93" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="DI_ListChats" bpmnElement="ListChats">
+        <dc:Bounds x="450" y="40" width="165" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="DI_ChooseChat" bpmnElement="ChooseChat">
+        <dc:Bounds x="650" y="40" width="165" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="DI_BindChat" bpmnElement="BindChat">
+        <dc:Bounds x="850" y="40" width="165" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="DI_ReleaseChat" bpmnElement="ReleaseChat">
+        <dc:Bounds x="450" y="200" width="165" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="DI_StopChat" bpmnElement="StopChat">
+        <dc:Bounds x="650" y="320" width="165" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="DI_InfoChat" bpmnElement="InfoChat">
+        <dc:Bounds x="850" y="440" width="165" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="DI_ChatReady" bpmnElement="ChatReady">
+        <dc:Bounds x="1110" y="305" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="DI_ResolveChat" bpmnElement="ResolveChat">
+        <dc:Bounds x="450" y="700" width="165" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="DI_RunChat" bpmnElement="RunChat">
+        <dc:Bounds x="650" y="700" width="165" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="DI_NeedPermission" bpmnElement="NeedPermission">
+        <dc:Bounds x="870" y="713" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="DI_SendReply" bpmnElement="SendReply">
+        <dc:Bounds x="1580" y="700" width="165" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="DI_ChatDone" bpmnElement="ChatDone">
+        <dc:Bounds x="1800" y="720" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="DI_WaitPermission" bpmnElement="WaitPermission">
+        <dc:Bounds x="1010" y="700" width="165" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="DI_ApprovalTimeout" bpmnElement="ApprovalTimeout">
+        <dc:Bounds x="1090" y="758" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="DI_DecisionKind" bpmnElement="DecisionKind">
+        <dc:Bounds x="1220" y="713" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="DI_AllowTool" bpmnElement="AllowTool">
+        <dc:Bounds x="1370" y="560" width="165" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="DI_DenyTool" bpmnElement="DenyTool">
+        <dc:Bounds x="1210" y="920" width="165" height="76" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="DI_C01" bpmnElement="C01">
+        <di:waypoint x="96.0" y="118.0" />
+        <di:waypoint x="170.0" y="118.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DI_C02" bpmnElement="C02">
+        <di:waypoint x="195.0" y="143.0" />
+        <di:waypoint x="195.0" y="250.0" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="210" y="195" width="100" height="30" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DI_C03" bpmnElement="C03">
+        <di:waypoint x="220.0" y="118.0" />
+        <di:waypoint x="320.0" y="118.0" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="240" y="90" width="100" height="30" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DI_C04" bpmnElement="C04">
+        <di:waypoint x="370.0" y="118.0" />
+        <di:waypoint x="450.0" y="78.0" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="360" y="0" width="100" height="30" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DI_C05" bpmnElement="C05">
+        <di:waypoint x="615.0" y="78.0" />
+        <di:waypoint x="650.0" y="78.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DI_C06" bpmnElement="C06">
+        <di:waypoint x="815.0" y="78.0" />
+        <di:waypoint x="850.0" y="78.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DI_C07" bpmnElement="C07">
+        <di:waypoint x="1015.0" y="78.0" />
+        <di:waypoint x="1060" y="78.0" />
+        <di:waypoint x="1060" y="323" />
+        <di:waypoint x="1110" y="323" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DI_C08" bpmnElement="C08">
+        <di:waypoint x="370.0" y="118.0" />
+        <di:waypoint x="395" y="118.0" />
+        <di:waypoint x="395" y="238.0" />
+        <di:waypoint x="450.0" y="238.0" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="410" y="170" width="100" height="30" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DI_C09" bpmnElement="C09">
+        <di:waypoint x="615.0" y="238.0" />
+        <di:waypoint x="1075" y="238.0" />
+        <di:waypoint x="1075" y="323" />
+        <di:waypoint x="1110" y="323" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DI_C10" bpmnElement="C10">
+        <di:waypoint x="370.0" y="118.0" />
+        <di:waypoint x="410" y="118.0" />
+        <di:waypoint x="410" y="358.0" />
+        <di:waypoint x="650.0" y="358.0" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="420" y="327" width="100" height="30" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DI_C11" bpmnElement="C11">
+        <di:waypoint x="815.0" y="358.0" />
+        <di:waypoint x="1090" y="358.0" />
+        <di:waypoint x="1090" y="323" />
+        <di:waypoint x="1110" y="323" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DI_C12" bpmnElement="C12">
+        <di:waypoint x="370.0" y="118.0" />
+        <di:waypoint x="425" y="118.0" />
+        <di:waypoint x="425" y="478.0" />
+        <di:waypoint x="850.0" y="478.0" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="440" y="447" width="100" height="30" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DI_C13" bpmnElement="C13">
+        <di:waypoint x="1015.0" y="478.0" />
+        <di:waypoint x="1050" y="478.0" />
+        <di:waypoint x="1050" y="323" />
+        <di:waypoint x="1110" y="323" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DI_C14" bpmnElement="C14">
+        <di:waypoint x="370.0" y="118.0" />
+        <di:waypoint x="380" y="118.0" />
+        <di:waypoint x="380" y="738.0" />
+        <di:waypoint x="450.0" y="738.0" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="390" y="707" width="100" height="30" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DI_C15" bpmnElement="C15">
+        <di:waypoint x="615.0" y="738.0" />
+        <di:waypoint x="650.0" y="738.0" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="605" y="670" width="100" height="30" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DI_C16" bpmnElement="C16">
+        <di:waypoint x="815.0" y="738.0" />
+        <di:waypoint x="870.0" y="738.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DI_C17" bpmnElement="C17">
+        <di:waypoint x="895.0" y="763.0" />
+        <di:waypoint x="895.0" y="850" />
+        <di:waypoint x="1662.5" y="850" />
+        <di:waypoint x="1662.5" y="776.0" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="920" y="817" width="100" height="30" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DI_C18" bpmnElement="C18">
+        <di:waypoint x="1745.0" y="738.0" />
+        <di:waypoint x="1800.0" y="738.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DI_C19" bpmnElement="C19">
+        <di:waypoint x="920.0" y="738.0" />
+        <di:waypoint x="1010.0" y="738.0" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="960" y="670" width="100" height="30" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DI_C20" bpmnElement="C20">
+        <di:waypoint x="1175.0" y="738.0" />
+        <di:waypoint x="1220.0" y="738.0" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DI_C21" bpmnElement="C21">
+        <di:waypoint x="1245.0" y="713.0" />
+        <di:waypoint x="1245.0" y="598.0" />
+        <di:waypoint x="1370.0" y="598.0" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1255" y="620" width="100" height="30" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DI_C22" bpmnElement="C22">
+        <di:waypoint x="1535.0" y="598.0" />
+        <di:waypoint x="1662.5" y="598.0" />
+        <di:waypoint x="1662.5" y="700.0" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1580" y="610" width="100" height="30" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DI_C23" bpmnElement="C23">
+        <di:waypoint x="1245.0" y="763.0" />
+        <di:waypoint x="1245.0" y="920.0" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1270" y="850" width="100" height="30" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DI_C24" bpmnElement="C24">
+        <di:waypoint x="1108.0" y="794.0" />
+        <di:waypoint x="1108.0" y="958.0" />
+        <di:waypoint x="1210.0" y="958.0" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1115" y="880" width="100" height="30" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DI_C25" bpmnElement="C25">
+        <di:waypoint x="1375.0" y="958.0" />
+        <di:waypoint x="1530" y="958.0" />
+        <di:waypoint x="1530" y="738.0" />
+        <di:waypoint x="1580.0" y="738.0" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1450" y="920" width="100" height="30" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DI_C26" bpmnElement="C26">
+        <di:waypoint x="532.5" y="776.0" />
+        <di:waypoint x="532.5" y="1080" />
+        <di:waypoint x="1662.5" y="1080" />
+        <di:waypoint x="1662.5" y="776.0" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="950" y="1045" width="100" height="30" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
 </bpmn:definitions>

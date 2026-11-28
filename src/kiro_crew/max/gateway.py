@@ -51,6 +51,9 @@ async def maybe_start_max(orch):
 
     async def callback(raw):
         # No uncorrelated/stale button may approve a tool. Typed shared approvals only.
+        if str((raw.get("callback") or {}).get("payload") or "").startswith("s:"):
+            await dispatcher.handle_callback(raw)
+            return
         await client.answer(
             raw["callback"]["callback_id"],
             "Use /approve or /deny for the current tool.",

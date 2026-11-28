@@ -1,0 +1,62 @@
+name: MAX Integration
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: max-integration-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  integration:
+    name: MAX integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - name: Install development dependencies
+        run: uv pip install --system -e '.[dev]'
+      - name: Test MAX and shared approval contracts
+        env:
+          PYTHONPATH: src
+        run: >-
+          python -m pytest -n0 --no-cov
+          test/test_max_sessions.py test/test_max_approvals.py
+          test/test_max_channel.py test/test_max_webhook.py test/test_max_tls.py
+          test/test_messaging_approval.py test/test_approval_timeout_cause.py
+          test/test_max_backport_build.py test/metrics/test_usage_attrs.py
+      - name: Build the audited 0.13.1 backport
+        env:
+          KIROCREW_SCRATCH: ${{ runner.temp }}/max-integration-build
+        run: |
+          mkdir "$KIROCREW_SCRATCH"
+          curl --fail --location --output "$KIROCREW_SCRATCH/base.whl" \
+            https://github.com/kirodotdev/KiroCrew/releases/download/v0.13.1/kirocrew-0.13.1-py3-none-any.whl
+          python scripts/max_backport_build.py "$KIROCREW_SCRATCH/base.whl" "$KIROCREW_SCRATCH/build"
+          uv venv --system-site-packages "$KIROCREW_SCRATCH/runtime"
+          uv pip install --python "$KIROCREW_SCRATCH/runtime/bin/python" \
+            "$KIROCREW_SCRATCH/build/dist/kirocrew-0.13.1+max.4-py3-none-any.whl"
+      - name: Test the installed backport
+        env:
+          PYTHONPATH: .:test
+          KIROCREW_SCRATCH: ${{ runner.temp }}/max-integration-build
+        run: |
+          "$KIROCREW_SCRATCH/runtime/bin/python" -m pytest --noconftest \
+            -p conftest -p max_backport_compat -n0 --no-cov \
+            -o pythonpath="$KIROCREW_SCRATCH/runtime/lib/python3.12/site-packages" \
+            test/test_max_sessions.py test/test_max_approvals.py \
+            test/test_max_channel.py test/test_max_webhook.py test/test_max_tls.py \
+            test/test_messaging_approval.py -k 'not pairing_model_and_svg'

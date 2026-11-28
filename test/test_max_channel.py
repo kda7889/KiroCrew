@@ -246,7 +246,9 @@ async def test_outbound_refuses_non_owner_and_redacts_token(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_dispatch_uses_shared_turn_and_isolates_agent_session(monkeypatch):
+@pytest.mark.parametrize("configured", ["", "auto"])
+async def test_dispatch_uses_shared_turn_and_isolates_agent_session(monkeypatch, configured):
+    from kiro_crew.config.loader import KiroCrewConfig, default_template
     from kiro_crew.max import dispatch
     from kiro_crew.max.access import OwnerAccess
     from kiro_crew.max.transport import MaxTransport
@@ -256,14 +258,19 @@ async def test_dispatch_uses_shared_turn_and_isolates_agent_session(monkeypatch)
 
     async def drive(turn, **kwargs):
         turns.append(turn)
+        await turn.renderer.on_text_chunk("ready")
+        await turn.renderer.on_done()
 
     monkeypatch.setattr(dispatch, "drive_turn", drive)
     sessions = SimpleNamespace(is_busy=lambda key: False, max_generation=lambda key: 0)
-    cfg = SimpleNamespace(agent=SimpleNamespace(default="auto"))
+    cfg = KiroCrewConfig()
+    cfg.agent.default_agent = configured
     router = dispatch.MaxDispatcher(sessions, None, cfg)
     router.transport = MaxTransport(Wire(), OwnerAccess([42], lambda uid: None), None, None)
     inbound = InboundMessage("max", "42", "42", "hello")
     await router.handle_message(inbound)
+    assert turns[0].agent == default_template(cfg)
+    assert router.transport.client.sent[-1][1] == "ready"
     assert turns[0].channel_type == "max"
     assert turns[0].session_key.startswith("max:")
     assert turns[0].approval_mode == "interactive"
@@ -555,7 +562,11 @@ def test_pairing_model_and_svg_are_consistent():
     svg = root / "docs/architecture/max-owner.svg"
     assert svg.read_text(encoding="utf-8") == render(svg.with_suffix(".bpmn"))
     parsed = ET.fromstring(svg.read_text(encoding="utf-8"))
-    assert len(parsed.findall(".//{http://www.w3.org/2000/svg}polyline")) == 9
+    model = ET.parse(svg.with_suffix(".bpmn")).getroot()
+    flows = model.findall(".//{http://www.omg.org/spec/BPMN/20100524/MODEL}sequenceFlow")
+    assert len(parsed.findall(".//{http://www.w3.org/2000/svg}polyline")) == len(flows)
+    assert "MaxConversation" in svg.with_suffix(".bpmn").read_text()
+    assert "Owner replies 1 / 2 / 3" in svg.read_text()
 
 
 @pytest.mark.asyncio
@@ -581,9 +592,11 @@ async def test_shared_agent_new_and_stop_commands_keep_session_binding(monkeypat
         stop_turn=stop,
         note_stop=lambda key: calls.append(("note", key)),
     )
-    router = dispatch.MaxDispatcher(
-        sessions, None, SimpleNamespace(agent=SimpleNamespace(default="auto"))
-    )
+    from kiro_crew.config.loader import KiroCrewConfig
+
+    cfg = KiroCrewConfig()
+    cfg.agent.default_agent = "auto"
+    router = dispatch.MaxDispatcher(sessions, None, cfg)
     router.transport = MaxTransport(Wire(), OwnerAccess([42], lambda uid: None), None, None)
 
     async def agent(picks, route, arg, **kwargs):

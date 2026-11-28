@@ -2,7 +2,7 @@
   "version": "0.13.1",
   "files": {
     "src/kiro_crew/channels.py": "d612e75f22a9698ddf5e609d93b936462a2cb2bea6a96b0620b27ace19bc48bb",
-    "src/kiro_crew/config/loader_config.py": "4d21b06c5621f831b2b7f6c83c65fa6870bf73d64ab6a0f588fc144f3af1b4e7",
+    "src/kiro_crew/config/loader_config.py": "d4c1530e19127e418365af34f742359314850cb45b9469ca08fc0990e8693de6",
     "src/kiro_crew/config/loader_credentials.py": "51266053fe03c69a012cf7cac08e3dee58be3be3c6cf67333c5afad9ca11747a",
     "src/kiro_crew/config/loader_pipeline.py": "0a0623ca8f91114571c72da1c55c32a53e9d088b1d3a277c1b95c7a7d6084210",
     "src/kiro_crew/config/resolution.py": "abd66fa19f6bb66539fcc961e370c6918e8301733550db2cdc80bef4935cfcc1",
@@ -28,6 +28,10 @@
     "src/kiro_crew/security/paths_lists.py": "208c5cd688e96c3c34b5db3334492421dd6ed272d8ee6ad8b8e8690eb35868f9",
     "src/kiro_crew/slack/gateway.py": "8e0038d861e4552f113ef96149a05279f3c4c4724b25f748220b739069e56170",
     "src/kiro_crew/slack/gateway_runtime/channel_boot.py": "58360f4b862a3f2d2b82fe09e9d0fc3e5cc46d13e91a0c041a84ef1b3e99306d",
-    "src/kiro_crew/slack/gateway_runtime/orchestrator_init.py": "71a7b6974c424c7757d0fa6c6b54e15f85035ae48e8ea853a0f1e835402f05ad"
+    "src/kiro_crew/slack/gateway_runtime/orchestrator_init.py": "71a7b6974c424c7757d0fa6c6b54e15f85035ae48e8ea853a0f1e835402f05ad",
+    "src/kiro_crew/messaging/approval.py": "e25b4645c2368babc548ff163e440358b93d49ff844ae7c1af13319d6916d7a5",
+    "src/kiro_crew/messaging/session_resume.py": "893f6e584c5d84d34b764795fad8bef22d252280e5adc9fa4589c0a8f2776ffb",
+    "src/kiro_crew/max/sessions.py": null,
+    "src/kiro_crew/messaging/renderer.py": "f4d2899ce415e6509bd1a7da63b8bc661123a3676d0e8982f8e3c4fd453b7592"
   }
 }

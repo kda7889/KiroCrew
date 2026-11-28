@@ -44,6 +44,13 @@
   <a href="#docs-and-contributing">Docs</a>
 </p>
 
+## MAX messenger integration in this fork
+
+This public fork includes MAX private chats, tool approvals, session selection
+and existing Crew Bot conversations. See the [MAX installation and development guide](docs/guides/max-main-rollout.md)
+for the focused `0.13.1+max.4` backport, commands, verification and limitations.
+Issues and improvements are welcome in this fork.
+
 ## Quick start
 
 You choose how to run Kiro Crew: the desktop app with automatic updates, a
